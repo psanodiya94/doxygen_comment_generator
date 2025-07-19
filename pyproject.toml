@@ -2,6 +2,7 @@
 requires = ["setuptools>=61", "wheel"]
 build-backend = "setuptools.build_meta"
 
+
 [project]
 name = "doxygen_comment_generator"
 version = "0.1.0"
@@ -11,6 +12,8 @@ license = { }
 authors = [
     { name="Pradumn Sanodiya", email="pradumnsanodiya2@gmail.com" }
 ]
+# All dependencies are from the Python standard library.
+# If you want to use the --gui option, your Python must have Tkinter available (see README for install instructions).
 dependencies = [
 ]
 requires-python = ">=3.7"

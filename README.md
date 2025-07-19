@@ -21,14 +21,31 @@
    cd doxygen_comment_generator
    ```
 
-2. **(Optional but recommended) Create and activate a virtual environment:**
+2. **(Recommended) Create and activate a virtual environment:**
 
    ```sh
    python3 -m venv venv
-   source venv/bin/activate
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
    ```
 
-3. **Install dependencies:**
+   *(This keeps dependencies isolated and makes it easy to manage your Python environment.)*
+
+## GUI Requirements
+
+If you want to use the `--gui` option, your Python must have Tkinter installed (it is included by default on most systems, but not all minimal Linux installs). If you see an error about Tkinter missing, install it with:
+
+```sh
+# On Ubuntu/Debian:
+sudo apt-get install python3-tk
+# On Fedora:
+sudo dnf install python3-tkinter
+# On Arch:
+sudo pacman -S tk
+```
+
+If you use a virtual environment, Tkinter must be available in the system Python used to create the venv.
+
+1. **Install dependencies:**
 
    ```sh
    pip install -r requirements.txt
@@ -41,16 +58,16 @@
 To generate Doxygen comments for a header file, run:
 
 ```sh
-python src/main.py <path_to_your_header_file>
+python src/generator/main.py <path_to_your_header_file>
 ```
 
 **Example:**
 
 ```sh
-python src/main.py example.h
+python src/generator/main.py example.h
 ```
 
-The script will print the file contents with generated Doxygen comments to the console.
+The script will update the file contents with generated Doxygen comments.
 
 ## Running Tests
 

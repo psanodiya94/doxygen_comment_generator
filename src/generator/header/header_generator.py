@@ -1,24 +1,33 @@
 import re
 from typing import List, Dict, Optional, Tuple
 
+
 class HeaderDoxygenGenerator:
     def __init__(self):
         """
-        Initialize the HeaderDoxygenGenerator with current class and namespace tracking.
+        Initialize the HeaderDoxygenGenerator.
+        Tracks the current class and namespace for context-aware comment generation.
         """
         self.current_class = None
         self.current_namespace = None
 
+
     def parse_header(self, filename: str) -> List[str]:
         """
-        Parse a C/C++ header file and return lines with added Doxygen comments.
+        Parse a C++ header file and return lines with added Doxygen comments.
 
         Args:
             filename (str): Path to the header file.
 
         Returns:
             List[str]: List of lines with Doxygen comments inserted.
+        Raises:
+            ValueError: If the file extension is not a supported C++ header file.
         """
+        # Only allow header files
+        ext = filename.split('.')[-1].lower()
+        if ext not in ["h", "hpp", "hh", "hxx"]:
+            raise ValueError("Only C++ header files are supported (.h, .hpp, .hh, .hxx)")
         with open(filename, 'r') as f:
             lines = f.readlines()
 
@@ -28,18 +37,19 @@ class HeaderDoxygenGenerator:
         class_brace_depth = 0
         last_was_decl = False
 
+        # Main parsing loop
         while i < len(lines):
             line = lines[i].rstrip('\n')
             stripped = line.strip()
 
-            # Skip empty lines
+            # Skip empty lines (preserve formatting)
             if not stripped:
                 output.append(lines[i])
                 last_was_decl = False
                 i += 1
                 continue
 
-            # Skip existing Doxygen comments
+            # Skip existing Doxygen comments (do not duplicate)
             if stripped.startswith('/**') or stripped.startswith('///') or stripped.startswith('/*!'):
                 while i < len(lines) and '*/' not in lines[i]:
                     output.append(lines[i])
@@ -50,7 +60,7 @@ class HeaderDoxygenGenerator:
                 last_was_decl = False
                 continue
 
-            # Handle namespace declaration
+            # Handle namespace declaration (track for context)
             namespace_match = re.match(r'namespace\s+(\w+)\s*\{', stripped)
             if namespace_match:
                 self.current_namespace = namespace_match.group(1)
@@ -61,7 +71,7 @@ class HeaderDoxygenGenerator:
                 i += 1
                 continue
 
-            # Handle class or struct declaration
+            # Handle class or struct declaration (track for context)
             class_match = re.match(r'(class|struct)\s+(\w+)\s*(?:final)?\s*(?::\s*(?:public|private|protected)\s+\w+)?\s*\{', stripped)
             if class_match:
                 self.current_class = class_match.group(2)
@@ -199,7 +209,7 @@ class HeaderDoxygenGenerator:
             last_was_decl = False
             i += 1
 
-        # Remove trailing blank lines
+        # Remove trailing blank lines for clean output
         while output and not output[-1].strip():
             output.pop()
         output.append('\n')
@@ -215,9 +225,9 @@ class HeaderDoxygenGenerator:
             start_idx (int): Index of the current line.
 
         Returns:
-            Optional[Tuple[Dict, int]]: Function info dict and end index, or None.
+            Optional[Tuple[Dict, int]]: Tuple of function info dict and end index, or None if not a function.
         """
-        # Handle multi-line function declarations
+        # Handle multi-line function declarations (join lines until ; or {)
         full_decl = line
         end_idx = start_idx
         while end_idx < len(lines) and ';' not in full_decl and '{' not in full_decl:
@@ -247,8 +257,7 @@ class HeaderDoxygenGenerator:
             if not assignment_type:
                 return None
 
-        # Match function declaration using regex
-        # This pattern will also match constructors and destructors
+        # Match function declaration using regex (also matches ctors/dtors)
         pattern = r'(?:(?:virtual|static|inline|explicit|constexpr)\s+)*' \
                   r'(?:[\w:<>]+\s+)*' \
                   r'(~?\w+|operator=)\s*\((.*?)\)\s*(?:const\s*)?' \
@@ -266,7 +275,7 @@ class HeaderDoxygenGenerator:
         ret_type_match = re.match(r'(?:(?:virtual|static|inline|explicit|constexpr)\s+)*((?:[\w:<>]+\s+)*)' + re.escape(func_name) + r'\s*\(', full_decl)
         return_type = ret_type_match.group(1).strip() if ret_type_match else ''
 
-        # Parse parameters
+        # Parse parameters (type and name)
         param_list = []
         if params:
             for p in [p.strip() for p in params.split(',')]:
@@ -328,12 +337,22 @@ class HeaderDoxygenGenerator:
             'is_move_assign': is_move_assign
         }, end_idx
 
+
     def _match_variable(self, line: str, lines: List[str], start_idx: int) -> Optional[Tuple[Dict, int]]:
+        """
+        Try to match a variable declaration starting at start_idx.
+        Args:
+            line (str): Current line.
+            lines (List[str]): All lines from the file.
+            start_idx (int): Index of the current line.
+        Returns:
+            Optional[Tuple[Dict, int]]: Tuple of variable info dict and end index, or None if not a variable.
+        """
         # Skip lines that are part of a function or other constructs
         if any(s in line for s in ['{', '}', '(', ')', ';']) and not (';' in line and '=' not in line):
             return None
 
-        # Handle multi-line declarations
+        # Handle multi-line declarations (join lines until ;)
         full_decl = line
         end_idx = start_idx
         while end_idx < len(lines) and ';' not in full_decl:
@@ -346,7 +365,7 @@ class HeaderDoxygenGenerator:
 
         full_decl = full_decl[:full_decl.index(';')].strip()
 
-        # Updated regex pattern
+        # Updated regex pattern for variable declarations
         pattern = r'(?:(?:static|constexpr|mutable|inline)\s+)?' \
                   r'(?:const\s+)?' \
                   r'(.+?)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:=\s*.*)?$'
@@ -367,8 +386,15 @@ class HeaderDoxygenGenerator:
             'full_decl': full_decl
         }, end_idx
 
+
     def _get_indent(self, line: str) -> str:
-        """Return the leading whitespace of a line."""
+        """
+        Return the leading whitespace of a line.
+        Args:
+            line (str): The line to check.
+        Returns:
+            str: Leading whitespace (indentation).
+        """
         return line[:len(line) - len(line.lstrip())]
 
     def _generate_class_comment(self, class_name: str, class_type: str, indent: str = "") -> List[str]:
