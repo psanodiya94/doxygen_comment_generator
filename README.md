@@ -58,13 +58,33 @@ If you use a virtual environment, Tkinter must be available in the system Python
 To generate Doxygen comments for a header file, run:
 
 ```sh
-python src/generator/main.py <path_to_your_header_file>
+python src/generator/main.py -f <path_to_your_header_file>
 ```
 
 **Example:**
 
 ```sh
-python src/generator/main.py example.h
+python src/generator/main.py -f example.h
+```
+
+## Command-Line Options
+
+The script supports the following options:
+
+- `-f <path_to_your_header_file>`: Path to the C++ header file to process (required).
+- `-o <path_to_your_output_file>`: Path to the C++ header file where you want to store if not inplace.
+- `--dry-run`: Print output to console instead of writing to file.
+- `--gui`: Launches a simple graphical interface for file selection and comment generation (requires Tkinter).
+- `-h`, `--help`: Show help message and exit.
+
+**Example usage:**
+
+```sh
+python src/generator/main.py --gui
+```
+
+```sh
+python src/generator/main.py -h
 ```
 
 The script will update the file contents with generated Doxygen comments.

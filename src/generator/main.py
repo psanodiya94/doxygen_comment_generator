@@ -14,7 +14,7 @@ def main():
     )
     parser.add_argument("-f", "--input_file", help="Path to the input C++ header file")
     parser.add_argument("-o", "--output", help="Path to output file (default: print to stdout)")
-    parser.add_argument("--dry-run", action="store_true", help="Print output to console only, do not write to file")
+    parser.add_argument("--dry-run", action="store_true", help="Print output to console instead of writing to file")
     parser.add_argument("--gui", action="store_true", help="Launch a simple GUI for file upload and Doxygen generation")
 
 
@@ -113,7 +113,9 @@ def main():
     # Output logic
     if args.dry_run:
         print(''.join(output_lines))
+        return
 
+    # If output file is specified, use it; otherwise, overwrite the input file
     if args.output:
         output_file = args.output
     else:
