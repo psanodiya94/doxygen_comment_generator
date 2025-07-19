@@ -101,6 +101,30 @@ class TestHeaderDoxygenGenerator(unittest.TestCase):
         self.assertEqual(self.generator._generate_brief_description("isEnabled"), "Checks if  enabled")
         self.assertEqual(self.generator._generate_brief_description("customFunc"), "Custom func")
 
+    @patch("builtins.open", new_callable=mock_open, read_data="""
+    class SettingsManager {
+    public:
+        static constexpr int MAX_SETTINGS = 100;
+    };
+    """)
+    def test_variable_comment_not_before_class(self, mock_file):
+        result = self.generator.parse_header("test.h")
+        # The comment should not be before the class, but before MAX_SETTINGS
+        for idx, line in enumerate(result):
+            if "class SettingsManager" in line:
+                # Next non-empty line should NOT be a doxygen comment
+                next_idx = idx + 1
+                while next_idx < len(result) and result[next_idx].strip() == "":
+                    next_idx += 1
+                self.assertFalse("/**" in result[next_idx])
+            if "MAX_SETTINGS" in line:
+                # The previous line should be the doxygen comment
+                self.assertTrue("/**" in result[idx-1])
+                self.assertIn("@brief Variable MAX_SETTINGS", "".join(result[idx-1:idx+2]))
+                break
+        else:
+            self.fail("MAX_SETTINGS not found in output")
+
 class TestCPlusPlusDoxygenGenerator(unittest.TestCase):
     def setUp(self):
         self.generator = CPlusPlusDoxygenGenerator()

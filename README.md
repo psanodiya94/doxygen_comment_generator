@@ -2,11 +2,12 @@
 
 ## Project Description
 
-**doxygen_generator** is a Python tool that automatically generates Doxygen-style comments for C++ header (`.h`, `.hpp`, etc.) and source (`.cpp`, `.cc`, etc.) files. It analyzes your code and inserts well-formatted Doxygen comments for classes, functions, enums, and variables, helping you maintain high-quality documentation with minimal effort.
+**doxygen_generator** is a Python tool that automatically generates Doxygen-style comments for C++ header (`.h`, `.hpp`, etc.) files. It analyzes your code and inserts well-formatted Doxygen comments for classes, functions, enums, and variables, helping you maintain high-quality documentation with minimal effort.
 
 ## Features
 
-- Supports both C++ header and source files
+-- Supports C++ header files
+
 - Preserves code indentation in generated comments
 - Easily extensible for other C/C++ file types
 - Simple command-line interface
@@ -37,17 +38,16 @@
 
 ## Usage
 
-To generate Doxygen comments for a file, run:
+To generate Doxygen comments for a header file, run:
 
 ```sh
-python src/main.py <path_to_your_cpp_or_header_file>
+python src/main.py <path_to_your_header_file>
 ```
 
-**Examples:**
+**Example:**
 
 ```sh
 python src/main.py example.h
-python src/main.py example.cpp
 ```
 
 The script will print the file contents with generated Doxygen comments to the console.
@@ -70,4 +70,4 @@ python -m unittest tests.test_generator
 
 - Make sure you have Python 3.7+ installed.
 - For best results, use the tool on well-formatted C++ code.
-- The tool automatically detects whether the input file is a header or source file and uses
+- The tool is designed for C++ header files only.
