@@ -2,7 +2,7 @@
 
 ## Project Description
 
-**doxygen_generator** is a Python tool that automatically generates Doxygen-style comments for C++ header (`.h`, `.hpp`, etc.) files. It analyzes your code and inserts well-formatted Doxygen comments for classes, functions, enums, and variables, helping you maintain high-quality documentation with minimal effort.
+**doxygen_comment_generator** is a Python tool that automatically generates Doxygen-style comments for C++ header (`.h`, `.hpp`, etc.) files. It analyzes your code and inserts well-formatted Doxygen comments for classes, functions, enums, and variables, helping you maintain high-quality documentation with minimal effort.
 
 ## Features
 
