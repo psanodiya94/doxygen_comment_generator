@@ -37,6 +37,7 @@ class HeaderDoxygenGenerator:
         class_brace_depth = 0
         last_was_decl = False
 
+
         # Main parsing loop
         while i < len(lines):
             line = lines[i].rstrip('\n')
@@ -71,45 +72,97 @@ class HeaderDoxygenGenerator:
                 i += 1
                 continue
 
-            # Handle class or struct declaration (track for context)
-            class_match = re.match(r'(class|struct)\s+(\w+)\s*(?:final)?\s*(?::\s*(?:public|private|protected)\s+\w+)?\s*\{', stripped)
-            if class_match:
-                self.current_class = class_match.group(2)
+            # --- Robust multi-line class/struct detection ---
+            # Look ahead for class/struct declaration possibly split across lines
+            class_decl_lines = []
+            class_decl_start = i
+            class_decl_found = False
+            class_type = None
+            class_name = None
+            class_decl_pattern = r'^(class|struct)\s+(\w+)(.*)$'
+            match = re.match(class_decl_pattern, stripped)
+            if match:
+                class_type = match.group(1)
+                class_name = match.group(2)
+                class_decl_lines.append(lines[i])
+                # Check if { is present, else look ahead
+                if '{' in stripped:
+                    class_decl_found = True
+                else:
+                    j = i + 1
+                    while j < len(lines):
+                        next_line = lines[j].strip()
+                        class_decl_lines.append(lines[j])
+                        if next_line.startswith('//') or next_line.startswith('/*'):
+                            break  # Don't cross over comments
+                        if '{' in next_line:
+                            class_decl_found = True
+                            break
+                        # Stop if we hit a semicolon (forward declaration)
+                        if ';' in next_line:
+                            break
+                        j += 1
+            if class_decl_found and class_type and class_name:
+                self.current_class = class_name
                 inside_class = True
                 class_brace_depth = 1
-                indent = self._get_indent(lines[i])
+                indent = self._get_indent(class_decl_lines[0])
                 if output and output[-1].strip():
                     output.append('\n')
-                doc_comment = self._generate_class_comment(class_match.group(2), class_match.group(1), indent)
+                doc_comment = self._generate_class_comment(class_name, class_type, indent)
                 output.extend(doc_comment)
-                output.append(lines[i])
+                for l in class_decl_lines:
+                    output.append(l)
                 output.append('\n')
+                i = class_decl_start + len(class_decl_lines)
                 last_was_decl = True
-                i += 1
                 # Process class body
+                prev_was_access_specifier = False
+                skip_next_comment = False
+                in_function_body = 0  # Track if inside a function body (brace depth)
+                prev_access_specifier_line = None
                 while i < len(lines) and inside_class:
                     line = lines[i].rstrip('\n')
                     stripped = line.strip()
                     class_brace_depth += stripped.count('{')
                     class_brace_depth -= stripped.count('}')
-                    # Skip visibility specifiers
+                    # Handle access specifiers
                     if re.match(r'^(public|private|protected)\s*:\s*$', stripped):
-                        output.append(lines[i])
+                        prev_access_specifier_line = lines[i]
                         i += 1
                         last_was_decl = False
                         continue
-                    # Try to match function or variable, even for constructors/destructors/overrides
+                    # Track if inside a function body
+                    if in_function_body > 0:
+                        in_function_body += stripped.count('{')
+                        in_function_body -= stripped.count('}')
+                        output.append(lines[i])
+                        if in_function_body == 0:
+                            prev_access_specifier_line = None
+                        i += 1
+                        continue
+                    # Try to match function (declaration or definition)
                     func_match = self._match_function(stripped, lines, i)
                     if func_match:
                         func_decl, end_idx = func_match
                         indent = self._get_indent(lines[i])
-                        if output and output[-1].strip():
-                            output.append('\n')
+                        # Clean up return_type: remove all C++ keywords
+                        ret_type = func_decl.get('return_type', '').strip()
+                        ret_type = re.sub(r'\b(?:virtual|inline|explicit|constexpr|static|friend|mutable|volatile|register|extern|thread_local|auto|typename|override|final)\b', '', ret_type)
+                        ret_type = re.sub(r'\s+', ' ', ret_type).strip()
+                        func_decl['return_type'] = ret_type
+                        # If previous line was an access specifier, output it first
+                        if prev_access_specifier_line:
+                            output.append(prev_access_specifier_line)
+                            prev_access_specifier_line = None
+                        # Place comment immediately before the function declaration, no extra blank line
                         doc_comment = self._generate_function_comment(func_decl, indent)
-                        output.extend(doc_comment)
+                        for line_comment in doc_comment:
+                            output.append(line_comment.rstrip('\n') + '\n')
                         for idx in range(i, end_idx + 1):
                             output.append(lines[idx])
-                        output.append('\n')
+                        if '{' in ''.join(lines[i:end_idx+1]):
+                            in_function_body = 1
                         i = end_idx + 1
                         last_was_decl = True
                         continue
@@ -118,16 +171,25 @@ class HeaderDoxygenGenerator:
                     if var_match:
                         var_decl, end_idx = var_match
                         indent = self._get_indent(lines[i])
-                        if output and output[-1].strip():
+                        # Only add comment if previous line is not an access specifier and not flagged to skip
+                        if output and output[-1].strip() and not prev_was_access_specifier and not skip_next_comment:
                             output.append('\n')
-                        doc_comment = self._generate_variable_comment(var_decl, indent)
-                        if doc_comment:
-                            output.extend(doc_comment)
+                        if not prev_was_access_specifier and not skip_next_comment:
+                            # Remove access specifier prefix from type if present
+                            if var_decl.get('type'):
+                                for spec in ('public:', 'private:', 'protected:'):
+                                    if var_decl['type'].startswith(spec):
+                                        var_decl['type'] = var_decl['type'][len(spec):].strip()
+                            doc_comment = self._generate_variable_comment(var_decl, indent)
+                            if doc_comment:
+                                output.extend(doc_comment)
                         for idx in range(i, end_idx + 1):
                             output.append(lines[idx])
                         output.append('\n')
                         i = end_idx + 1
                         last_was_decl = True
+                        prev_was_access_specifier = False
+                        skip_next_comment = False
                         continue
                     # End of class
                     if class_brace_depth == 0:
@@ -142,6 +204,8 @@ class HeaderDoxygenGenerator:
                     output.append(lines[i])
                     i += 1
                     last_was_decl = False
+                    prev_was_access_specifier = False
+                    skip_next_comment = False
                 continue
 
             # Handle function declarations (outside class)
@@ -174,22 +238,6 @@ class HeaderDoxygenGenerator:
                 last_was_decl = True
                 continue
 
-            # Handle variable declarations (member or global)
-            var_match = self._match_variable(stripped, lines, i)
-            if var_match:
-                var_decl, end_idx = var_match
-                indent = self._get_indent(lines[i])
-                if output and output[-1].strip():
-                    output.append('\n')
-                doc_comment = self._generate_variable_comment(var_decl, indent)
-                if doc_comment:
-                    output.extend(doc_comment)
-                for idx in range(i, end_idx + 1):
-                    output.append(lines[idx])
-                output.append('\n')
-                i = end_idx + 1
-                last_was_decl = True
-                continue
 
             # Handle closing braces for namespace/class
             if stripped == '}' and (self.current_class or self.current_namespace):
@@ -352,6 +400,13 @@ class HeaderDoxygenGenerator:
         if any(s in line for s in ['{', '}', '(', ')', ';']) and not (';' in line and '=' not in line):
             return None
 
+        # Skip forward declarations and type/namespace/using/typedef declarations
+        skip_prefixes = (
+            'class ', 'struct ', 'enum ', 'namespace ', 'using ', 'typedef ', 'template ', 'friend ', 'public:', 'private:', 'protected:'
+        )
+        if line.strip().startswith(skip_prefixes):
+            return None
+
         # Handle multi-line declarations (join lines until ;)
         full_decl = line
         end_idx = start_idx
@@ -364,6 +419,10 @@ class HeaderDoxygenGenerator:
             return None
 
         full_decl = full_decl[:full_decl.index(';')].strip()
+
+        # Skip again if the full_decl is a forward declaration or type/namespace/using/typedef
+        if full_decl.startswith(skip_prefixes):
+            return None
 
         # Updated regex pattern for variable declarations
         pattern = r'(?:(?:static|constexpr|mutable|inline)\s+)?' \
@@ -420,65 +479,59 @@ class HeaderDoxygenGenerator:
 
     def _generate_function_comment(self, func: Dict, indent: str = "") -> List[str]:
         """
-        Generate Doxygen comment for a function, constructor, or destructor.
-
-        Args:
-            func (Dict): Function information.
-            indent (str): Indentation to use.
-
-        Returns:
-            List[str]: Doxygen comment lines.
+        Generate a compact, readable Doxygen comment for a function, constructor, or destructor.
         """
-        comment = [f'{indent}/**\n']
+        ret_type = func.get('return_type', '').strip()
+        for spec in ('public:', 'private:', 'protected:'):
+            if ret_type.startswith(spec):
+                ret_type = ret_type[len(spec):].strip()
+        ret_type = re.sub(r'^(virtual|inline|explicit|constexpr|static)\\s+', '', ret_type)
+
+        comment = [f'{indent}/**']
 
         # Brief description
         if func.get('is_copy_ctor'):
-            brief_desc = f"{indent} * @brief Copy constructor for {self.current_class}\n"
+            comment.append(f"{indent} * @brief Copy constructor for {self.current_class}")
         elif func.get('is_move_ctor'):
-            brief_desc = f"{indent} * @brief Move constructor for {self.current_class}\n"
+            comment.append(f"{indent} * @brief Move constructor for {self.current_class}")
         elif func.get('is_copy_assign'):
-            brief_desc = f"{indent} * @brief Copy assignment operator for {self.current_class}\n"
+            comment.append(f"{indent} * @brief Copy assignment operator for {self.current_class}")
         elif func.get('is_move_assign'):
-            brief_desc = f"{indent} * @brief Move assignment operator for {self.current_class}\n"
+            comment.append(f"{indent} * @brief Move assignment operator for {self.current_class}")
         elif func.get('is_ctor'):
-            brief_desc = f"{indent} * @brief Constructor for {self.current_class}\n"
+            comment.append(f"{indent} * @brief Constructor for {self.current_class}")
         elif func.get('is_dtor'):
-            brief_desc = f"{indent} * @brief Destructor for {self.current_class}\n"
+            comment.append(f"{indent} * @brief Destructor for {self.current_class}")
         else:
-            brief_desc = f"{indent} * @brief {self._generate_brief_description(func['name'])}\n"
-        comment.append(brief_desc)
-        comment.append(f'{indent} *\n')
+            comment.append(f"{indent} * @brief {self._generate_brief_description(func['name'])}")
 
         # Detailed description
-        comment.append(f'{indent} * @details \n')
-        comment.append(f'{indent} *\n')
+        comment.append(f'{indent} * @details')
 
         # Parameters
         for param_type, param_name in func['params']:
-            if param_name:  # Skip unnamed parameters
-                comment.append(f'{indent} * @param {param_name} \n')
+            if param_name:
+                clean_name = param_name.lstrip('&*')
+                comment.append(f'{indent} * @param {clean_name}')
 
-        # Return value (not for constructors/destructors)
-        if not func.get('is_ctor') and not func.get('is_dtor') and func['return_type'] not in ('void', ''):
-            comment.append(f'{indent} * @return {func["return_type"]} \n')
+        # Return value
+        if not func.get('is_ctor') and not func.get('is_dtor') and ret_type not in ('void', ''):
+            comment.append(f'{indent} * @return {ret_type}')
 
         # Exceptions
         if func['throw']:
             for exc in func['throw']:
-                comment.append(f'{indent} * @throws {exc} \n')
+                comment.append(f'{indent} * @throws {exc}')
         elif not func['noexcept']:
-            comment.append(f'{indent} * @throws std::exception on error\n')
+            comment.append(f'{indent} * @throws std::exception on error')
 
-        # Static
         if func['static']:
-            comment.append(f'{indent} * @static\n')
-
-        # Const
+            comment.append(f'{indent} * @static')
         if func['const']:
-            comment.append(f'{indent} * @const\n')
+            comment.append(f'{indent} * @const')
 
         comment.append(f'{indent} */\n')
-        return comment
+        return [line + '\n' for line in comment]
 
     def _generate_enum_comment(self, enum_name: str, indent: str = "") -> List[str]:
         """
