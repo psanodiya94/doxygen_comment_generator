@@ -1,4 +1,4 @@
-# doxygen_generator
+# doxygen_comment_generator
 
 ## Project Description
 
