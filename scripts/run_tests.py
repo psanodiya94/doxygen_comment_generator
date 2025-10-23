@@ -72,40 +72,85 @@ def check_dependencies():
     """Check if required dependencies are installed"""
     print_section("Checking Dependencies", Colors.OKCYAN)
 
-    dependencies = {
-        'pytest': 'pytest --version',
-        'pytest-cov': 'pytest --co -q 2>&1 | grep -q "pytest-cov" || echo "not_critical"'
-    }
+    # Check pytest
+    result = subprocess.run(
+        'python3 -m pytest --version',
+        shell=True,
+        capture_output=True,
+        text=True
+    )
 
-    all_installed = True
-    for dep, check_cmd in dependencies.items():
-        result = subprocess.run(
-            check_cmd,
-            shell=True,
-            capture_output=True,
-            text=True
-        )
-        if result.returncode == 0 or 'not_critical' in result.stdout:
-            print_success(f"{dep} is available")
-        else:
-            print_error(f"{dep} is not installed")
-            if dep == 'pytest':
-                all_installed = False
-            else:
-                print_info(f"  Install with: pip install {dep}")
+    pytest_installed = result.returncode == 0
 
-    return all_installed
+    if pytest_installed:
+        print_success("pytest is available")
+    else:
+        print_error("pytest is not installed")
+
+    # Check pytest-cov (optional)
+    result_cov = subprocess.run(
+        'python3 -c "import pytest_cov" 2>/dev/null',
+        shell=True,
+        capture_output=True,
+        text=True
+    )
+
+    if result_cov.returncode == 0:
+        print_success("pytest-cov is available")
+    else:
+        print_info("pytest-cov is not installed (optional for coverage)")
+
+    return pytest_installed
 
 
-def run_tests(with_coverage=False, verbose=False, test_path=None):
+def install_dependencies(with_coverage=False):
+    """Install pytest and optionally pytest-cov"""
+    print_section("Installing Test Dependencies", Colors.OKCYAN)
+
+    packages = ['pytest']
+    if with_coverage:
+        packages.append('pytest-cov')
+
+    cmd = f"python3 -m pip install {' '.join(packages)}"
+    print_info(f"Installing {', '.join(packages)}...")
+
+    result = subprocess.run(
+        cmd,
+        shell=True,
+        capture_output=True,
+        text=True
+    )
+
+    if result.returncode == 0:
+        print_success(f"Successfully installed {', '.join(packages)}")
+        return True
+    else:
+        print_error("Failed to install dependencies")
+        print_info("You may need to install manually:")
+        print_info(f"  pip install {' '.join(packages)}")
+        if result.stderr:
+            print_info(f"Error: {result.stderr.strip()}")
+        return False
+
+
+def run_tests(with_coverage=False, verbose=False, test_path=None, auto_install=True):
     """Run the test suite"""
     print_banner("🧪 DOXYGEN COMMENT GENERATOR TEST SUITE 🧪", Colors.HEADER)
 
     # Check dependencies
     if not check_dependencies():
-        print_error("\nMissing required dependencies. Please install pytest first.")
-        print_info("Install with: pip install pytest pytest-cov")
-        return False
+        if auto_install:
+            print_info("\nAttempting to install missing dependencies...")
+            if not install_dependencies(with_coverage=with_coverage):
+                print_error("\nFailed to install dependencies automatically.")
+                print_info("Please install manually: pip install pytest pytest-cov")
+                return False
+            print()
+        else:
+            print_error("\nMissing required dependencies.")
+            print_info("Install with: pip install pytest pytest-cov")
+            print_info("Or run with --install-deps flag")
+            return False
 
     # Build pytest command
     cmd_parts = ['python3', '-m', 'pytest']
@@ -167,10 +212,15 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  %(prog)s                    # Run all tests
+  %(prog)s                    # Run all tests (auto-installs pytest if missing)
   %(prog)s --coverage         # Run tests with coverage report
   %(prog)s -c -v              # Run with coverage and verbose output
   %(prog)s tests/test_generator.py  # Run specific test file
+  %(prog)s --install-deps     # Install dependencies and exit
+  %(prog)s --no-auto-install  # Don't auto-install if pytest is missing
+
+Note: The script will automatically install pytest if it's not found, unless
+      the --no-auto-install flag is used.
         """
     )
 
@@ -195,7 +245,13 @@ Examples:
     parser.add_argument(
         '--install-deps',
         action='store_true',
-        help='Install test dependencies (pytest, pytest-cov)'
+        help='Install test dependencies and exit (pytest, pytest-cov)'
+    )
+
+    parser.add_argument(
+        '--no-auto-install',
+        action='store_true',
+        help='Do not automatically install missing dependencies'
     )
 
     args = parser.parse_args()
@@ -206,22 +262,19 @@ Examples:
     import os
     os.chdir(project_root)
 
-    # Install dependencies if requested
+    # Install dependencies if requested and exit
     if args.install_deps:
-        print_section("Installing Test Dependencies", Colors.OKCYAN)
-        cmd = "pip install pytest pytest-cov"
-        if run_command(cmd, "Installing pytest and pytest-cov"):
-            print_success("Dependencies installed successfully!")
+        if install_dependencies(with_coverage=True):
+            return 0
         else:
-            print_error("Failed to install dependencies")
             return 1
-        print()
 
     # Run tests
     success = run_tests(
         with_coverage=args.coverage,
         verbose=args.verbose,
-        test_path=args.test_path
+        test_path=args.test_path,
+        auto_install=not args.no_auto_install
     )
 
     return 0 if success else 1
