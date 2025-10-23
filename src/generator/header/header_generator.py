@@ -147,9 +147,10 @@ class HeaderDoxygenGenerator:
                     stripped = line.strip()
                     class_brace_depth += stripped.count('{')
                     class_brace_depth -= stripped.count('}')
-                    # Handle access specifiers
+                    # Handle access specifiers - output immediately and mark for next declaration
                     if re.match(r'^(public|private|protected)\s*:\s*$', stripped):
-                        prev_access_specifier_line = lines[i]
+                        output.append(lines[i])
+                        prev_access_specifier_line = True  # Mark that we just output an access specifier
                         i += 1
                         last_was_decl = False
                         continue
@@ -158,10 +159,15 @@ class HeaderDoxygenGenerator:
                         in_function_body += stripped.count('{')
                         in_function_body -= stripped.count('}')
                         output.append(lines[i])
-                        if in_function_body == 0:
-                            prev_access_specifier_line = None
                         i += 1
                         continue
+
+                    # Skip blank lines and simple lines that can't be function declarations
+                    if not stripped or stripped.startswith('//') or stripped.startswith('#'):
+                        output.append(lines[i])
+                        i += 1
+                        continue
+
                     # Try to match function (declaration or definition)
                     func_match = self._match_function(stripped, lines, i)
                     if func_match:
@@ -172,20 +178,20 @@ class HeaderDoxygenGenerator:
                         ret_type = re.sub(r'\b(?:virtual|inline|explicit|constexpr|static|friend|mutable|volatile|register|extern|thread_local|auto|typename|override|final)\b', '', ret_type)
                         ret_type = re.sub(r'\s+', ' ', ret_type).strip()
                         func_decl['return_type'] = ret_type
-                        # If previous line was an access specifier, output it first
-                        if prev_access_specifier_line:
-                            output.append(prev_access_specifier_line)
-                            prev_access_specifier_line = None
-                        # Place comment immediately before the function declaration, no extra blank line
+
+                        # Generate and output comment with proper indentation
                         doc_comment = self._generate_function_comment(func_decl, indent)
                         for line_comment in doc_comment:
                             output.append(line_comment.rstrip('\n') + '\n')
+
+                        # Output the function declaration
                         for idx in range(i, end_idx + 1):
                             output.append(lines[idx])
                         if '{' in ''.join(lines[i:end_idx+1]):
                             in_function_body = 1
                         i = end_idx + 1
                         last_was_decl = True
+                        prev_access_specifier_line = None  # Reset after processing
                         continue
                     # Try to match variable (including those with default values, e.g. int x = 0;)
                     var_match = self._match_variable(stripped, lines, i)
