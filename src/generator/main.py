@@ -10,18 +10,20 @@ def main():
 
 
     parser = argparse.ArgumentParser(
-        description="Generate Doxygen comments for C++ header files."
+        description="Generate Doxygen comments for C++ header and source files."
     )
-    parser.add_argument("-f", "--input_file", help="Path to the input C++ header file")
-    parser.add_argument("-o", "--output", help="Path to output file (default: print to stdout)")
+    parser.add_argument("-f", "--input_file", help="Path to the input C++ file (header or source)")
+    parser.add_argument("-o", "--output", help="Path to output file (default: overwrite input file)")
     parser.add_argument("--dry-run", action="store_true", help="Print output to console instead of writing to file")
     parser.add_argument("--gui", action="store_true", help="Launch a simple GUI for file upload and Doxygen generation")
+    parser.add_argument("--test-mode", action="store_true", help="Enable specialized test case documentation mode")
 
 
     args = parser.parse_args()
 
     try:
         from generator.header.header_generator import HeaderDoxygenGenerator
+        from generator.cpp.cpp_generator import CppSourceGenerator
     except ImportError as e:
         print("Error importing generator modules:", e)
         sys.exit(2)
@@ -40,7 +42,14 @@ def main():
             root.geometry("700x500")
 
             def select_file():
-                file_path = filedialog.askopenfilename(filetypes=[("Header Files", "*.h *.hpp *.hh *.hxx")])
+                file_path = filedialog.askopenfilename(
+                    filetypes=[
+                        ("C++ Files", "*.h *.hpp *.hh *.hxx *.cpp *.cc *.cxx *.c++"),
+                        ("Header Files", "*.h *.hpp *.hh *.hxx"),
+                        ("Source Files", "*.cpp *.cc *.cxx *.c++"),
+                        ("All Files", "*.*")
+                    ]
+                )
                 if file_path:
                     entry_file.delete(0, tk.END)
                     entry_file.insert(0, file_path)
@@ -48,15 +57,16 @@ def main():
             def generate_comments():
                 file_path = entry_file.get()
                 if not file_path or not os.path.isfile(file_path):
-                    messagebox.showerror("Error", "Please select a valid header file.")
+                    messagebox.showerror("Error", "Please select a valid C++ file.")
                     return
                 ext = os.path.splitext(file_path)[1].lower()
-                if ext not in [".h", ".hpp", ".hh", ".hxx"]:
-                    messagebox.showerror("Error", "Unsupported file type. Only C++ header files are supported.")
+                if ext not in [".h", ".hpp", ".hh", ".hxx", ".cpp", ".cc", ".cxx", ".c++"]:
+                    messagebox.showerror("Error", "Unsupported file type. Only C++ header and source files are supported.")
                     return
                 try:
-                    generator = HeaderDoxygenGenerator()
-                    output_lines = generator.parse_header(file_path)
+                    # Use CppSourceGenerator for all file types (handles both headers and sources)
+                    generator = CppSourceGenerator()
+                    output_lines = generator.parse_source(file_path)
                     text_output.delete(1.0, tk.END)
                     text_output.insert(tk.END, ''.join(output_lines))
                 except Exception as e:
@@ -67,7 +77,15 @@ def main():
                 if not content.strip():
                     messagebox.showinfo("Info", "No output to save.")
                     return
-                save_path = filedialog.asksaveasfilename(defaultextension=".h", filetypes=[("Header Files", "*.h *.hpp *.hh *.hxx"), ("All Files", "*.*")])
+                save_path = filedialog.asksaveasfilename(
+                    defaultextension=".h",
+                    filetypes=[
+                        ("C++ Files", "*.h *.hpp *.hh *.hxx *.cpp *.cc *.cxx *.c++"),
+                        ("Header Files", "*.h *.hpp *.hh *.hxx"),
+                        ("Source Files", "*.cpp *.cc *.cxx *.c++"),
+                        ("All Files", "*.*")
+                    ]
+                )
                 if save_path:
                     with open(save_path, 'w') as f:
                         f.write(content)
@@ -75,7 +93,7 @@ def main():
 
             frame = tk.Frame(root)
             frame.pack(pady=10)
-            tk.Label(frame, text="Header File:").pack(side=tk.LEFT)
+            tk.Label(frame, text="C++ File:").pack(side=tk.LEFT)
             entry_file = tk.Entry(frame, width=50)
             entry_file.pack(side=tk.LEFT, padx=5)
             tk.Button(frame, text="Browse", command=select_file).pack(side=tk.LEFT)
@@ -99,13 +117,18 @@ def main():
         sys.exit(1)
 
     ext = os.path.splitext(input_file)[1].lower()
-    if ext not in [".h", ".hpp", ".hh", ".hxx"]:
-        print("Unsupported file type. Only C++ header files are supported.")
+    if ext not in [".h", ".hpp", ".hh", ".hxx", ".cpp", ".cc", ".cxx", ".c++"]:
+        print("Unsupported file type. Only C++ header and source files are supported.")
         sys.exit(1)
 
     try:
-        generator = HeaderDoxygenGenerator()
-        output_lines = generator.parse_header(input_file)
+        # Use CppSourceGenerator for all file types (handles both headers and sources)
+        generator = CppSourceGenerator()
+        output_lines = generator.parse_source(input_file)
+
+        # Display information about detected test framework
+        if generator.is_test_file:
+            print(f"Detected test file using {generator.detected_framework} framework")
     except Exception as e:
         print(f"Error processing file: {e}")
         sys.exit(3)
