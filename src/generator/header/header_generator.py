@@ -147,9 +147,10 @@ class HeaderDoxygenGenerator:
                     stripped = line.strip()
                     class_brace_depth += stripped.count('{')
                     class_brace_depth -= stripped.count('}')
-                    # Handle access specifiers
+                    # Handle access specifiers - output immediately and mark for next declaration
                     if re.match(r'^(public|private|protected)\s*:\s*$', stripped):
-                        prev_access_specifier_line = lines[i]
+                        output.append(lines[i])
+                        prev_access_specifier_line = True  # Mark that we just output an access specifier
                         i += 1
                         last_was_decl = False
                         continue
@@ -158,10 +159,15 @@ class HeaderDoxygenGenerator:
                         in_function_body += stripped.count('{')
                         in_function_body -= stripped.count('}')
                         output.append(lines[i])
-                        if in_function_body == 0:
-                            prev_access_specifier_line = None
                         i += 1
                         continue
+
+                    # Skip blank lines and simple lines that can't be function declarations
+                    if not stripped or stripped.startswith('//') or stripped.startswith('#'):
+                        output.append(lines[i])
+                        i += 1
+                        continue
+
                     # Try to match function (declaration or definition)
                     func_match = self._match_function(stripped, lines, i)
                     if func_match:
@@ -172,20 +178,20 @@ class HeaderDoxygenGenerator:
                         ret_type = re.sub(r'\b(?:virtual|inline|explicit|constexpr|static|friend|mutable|volatile|register|extern|thread_local|auto|typename|override|final)\b', '', ret_type)
                         ret_type = re.sub(r'\s+', ' ', ret_type).strip()
                         func_decl['return_type'] = ret_type
-                        # If previous line was an access specifier, output it first
-                        if prev_access_specifier_line:
-                            output.append(prev_access_specifier_line)
-                            prev_access_specifier_line = None
-                        # Place comment immediately before the function declaration, no extra blank line
+
+                        # Generate and output comment with proper indentation
                         doc_comment = self._generate_function_comment(func_decl, indent)
                         for line_comment in doc_comment:
                             output.append(line_comment.rstrip('\n') + '\n')
+
+                        # Output the function declaration
                         for idx in range(i, end_idx + 1):
                             output.append(lines[idx])
                         if '{' in ''.join(lines[i:end_idx+1]):
                             in_function_body = 1
                         i = end_idx + 1
                         last_was_decl = True
+                        prev_access_specifier_line = None  # Reset after processing
                         continue
                     # Try to match variable (including those with default values, e.g. int x = 0;)
                     var_match = self._match_variable(stripped, lines, i)
@@ -659,167 +665,3 @@ class HeaderDoxygenGenerator:
 
         return readable
 
-    def process_lines(self, lines: List[str]) -> List[str]:
-        """
-        Process lines of a header file, adding Doxygen comments.
-
-        Args:
-            lines (List[str]): Lines of the header file.
-
-        Returns:
-            List[str]: Lines with added Doxygen comments.
-        """
-        output_lines = []
-        inside_class = False
-        current_indent = ""
-
-        for i, line in enumerate(lines):
-            stripped_line = line.strip()
-
-            # Skip empty lines
-            if not stripped_line:
-                output_lines.append(line)
-                continue
-
-            # Skip existing Doxygen comments
-            if stripped_line.startswith('/**') or stripped_line.startswith('///') or stripped_line.startswith('/*!'):
-                output_lines.append(line)
-                continue
-
-            # Handle namespace declaration
-            namespace_match = re.match(r'namespace\s+(\w+)\s*\{', stripped_line)
-            if namespace_match:
-                self.current_namespace = namespace_match.group(1)
-                output_lines.append(line)
-                continue
-
-            # Handle class or struct declaration
-            class_match = re.match(
-                r'(class|struct)\s+(\w+)\s*(?:final)?\s*(?::\s*(?:public|private|protected)\s+\w+)?\s*\{', stripped_line)
-            if class_match:
-                self.current_class = class_match.group(2)
-                inside_class = True
-                class_brace_depth = 1
-                indent = self._get_indent(lines[i])
-                doc_comment = self._generate_class_comment(class_match.group(2), class_match.group(1), indent)
-                output_lines.extend(doc_comment)
-                output_lines.append(lines[i])
-                i += 1
-                # Process class body
-                while i < len(lines) and inside_class:
-                    line = lines[i].strip()
-                    class_brace_depth += line.count('{')
-                    class_brace_depth -= line.count('}')
-                    # Skip visibility specifiers
-                    if re.match(r'^(public|private|protected)\s*:\s*$', line):
-                        output_lines.append(lines[i])
-                        i += 1
-                        continue
-                    # Variable in class
-                    var_match = self._match_variable(line, lines, i)
-                    if var_match:
-                        var_decl, end_idx = var_match
-                        indent = self._get_indent(lines[i])
-                        doc_comment = self._generate_variable_comment(var_decl, indent)
-                        if doc_comment:
-                            output_lines.extend(doc_comment)
-                        for idx in range(i, end_idx + 1):
-                            output_lines.append(lines[idx])
-                        i = end_idx + 1
-                        continue
-                    # Function in class
-                    func_match = self._match_function(line, lines, i)
-                    if func_match:
-                        func_decl, end_idx = func_match
-                        indent = self._get_indent(lines[i])
-                        doc_comment = self._generate_function_comment(func_decl, indent)
-                        output_lines.extend(doc_comment)
-                        for idx in range(i, end_idx + 1):
-                            output_lines.append(lines[idx])
-                        i = end_idx + 1
-                        continue
-                    # End of class
-                    if class_brace_depth == 0:
-                        inside_class = False
-                        self.current_class = None
-                        output_lines.append(lines[i])
-                        i += 1
-                        break
-                    # Regular line in class
-                    output_lines.append(lines[i])
-                    i += 1
-                continue
-
-            # Handle function declarations
-            func_match = self._match_function(stripped_line, lines, i)
-            if func_match:
-                func_decl, end_idx = func_match
-                indent = self._get_indent(lines[i])
-                doc_comment = self._generate_function_comment(func_decl, indent)
-                output_lines.extend(doc_comment)
-                # Add the original lines
-                for idx in range(i, end_idx + 1):
-                    output_lines.append(lines[idx])
-                i = end_idx + 1
-                continue
-
-            # Handle enum declaration
-            enum_match = re.match(r'enum\s+(?:class\s+)?(\w+)\s*(?::\s*\w+)?\s*\{', stripped_line)
-            if enum_match:
-                indent = self._get_indent(lines[i])
-                doc_comment = self._generate_enum_comment(enum_match.group(1), indent)
-                output_lines.extend(doc_comment)
-                output_lines.append(lines[i])
-                continue
-
-            # Handle variable declarations (member or global)
-            var_match = self._match_variable(stripped_line, lines, i)
-            if var_match:
-                var_decl, end_idx = var_match
-                indent = self._get_indent(lines[i])
-                doc_comment = self._generate_variable_comment(var_decl, indent)
-                if doc_comment:
-                    output_lines.extend(doc_comment)
-                for idx in range(i, end_idx + 1):
-                    output_lines.append(lines[idx])
-                i = end_idx + 1
-                continue
-
-            # Handle closing braces for namespace/class
-            if stripped_line == '}' and (self.current_class or self.current_namespace):
-                if ';' in stripped_line:  # End of class/namespace
-                    if self.current_class:
-                        self.current_class = None
-                    else:
-                        self.current_namespace = None
-                output_lines.append(line)
-                inside_class = False
-                continue
-
-            # If inside a class, check for variable declarations and add comments
-            if inside_class and self._is_variable_declaration(stripped_line):
-                var_info = self._match_variable(stripped_line, lines, i)
-                if var_info:
-                    # Insert comment before this variable
-                    comment = self._generate_variable_comment(var_info[0], indent=current_indent)
-                    output_lines.extend(comment)
-                    output_lines.append(line)
-                    continue
-
-            # Regular line - just add it
-            output_lines.append(line)
-
-        return output_lines
-
-    def _is_variable_declaration(self, line: str) -> bool:
-        """
-        Check if a line is a variable declaration.
-
-        Args:
-            line (str): Line to check.
-
-        Returns:
-            bool: True if it's a variable declaration, False otherwise.
-        """
-        # A simple check for variable declaration patterns
-        return re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*\s*=', line) is not None
