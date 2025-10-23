@@ -265,5 +265,208 @@ void testSomething() {
         self.assertIn('CppUnit', result_str)
 
 
+class TestDirectoryProcessorExtended(unittest.TestCase):
+    """Extended tests for DirectoryProcessor to improve coverage."""
+
+    def setUp(self):
+        """Set up test fixtures."""
+        self.processor = DirectoryProcessor()
+        self.test_dir = None
+        self.output_dir = None
+
+    def tearDown(self):
+        """Clean up test directories."""
+        for directory in [self.test_dir, self.output_dir]:
+            if directory and os.path.exists(directory):
+                shutil.rmtree(directory)
+
+    def test_directory_does_not_exist(self):
+        """Test error when directory doesn't exist."""
+        with self.assertRaises(ValueError) as context:
+            self.processor.find_cpp_files('/nonexistent/path/to/dir')
+        self.assertIn('does not exist', str(context.exception))
+
+    def test_path_is_not_directory(self):
+        """Test error when path is a file, not a directory."""
+        self.test_dir = tempfile.mkdtemp()
+        test_file = os.path.join(self.test_dir, 'test.txt')
+        with open(test_file, 'w') as f:
+            f.write('test')
+
+        with self.assertRaises(ValueError) as context:
+            self.processor.find_cpp_files(test_file)
+        self.assertIn('not a directory', str(context.exception))
+
+    def test_no_cpp_files_found(self):
+        """Test when no C++ files are found in directory."""
+        self.test_dir = tempfile.mkdtemp()
+        # Create only non-C++ files
+        with open(os.path.join(self.test_dir, 'readme.txt'), 'w') as f:
+            f.write('readme')
+
+        results = self.processor.process_directory(self.test_dir, recursive=False)
+        self.assertIn('_info', results)
+        self.assertFalse(results['_info'][0])
+        self.assertIn('No C++ files found', results['_info'][1])
+
+    def test_process_with_output_dir(self):
+        """Test processing files with output directory."""
+        self.test_dir = tempfile.mkdtemp()
+        self.output_dir = tempfile.mkdtemp()
+
+        # Create a simple C++ file
+        test_file = os.path.join(self.test_dir, 'test.h')
+        with open(test_file, 'w') as f:
+            f.write('class Test { public: void method(); };\n')
+
+        results = self.processor.process_directory(
+            self.test_dir,
+            output_dir=self.output_dir,
+            dry_run=False,
+            recursive=False
+        )
+
+        # Check that output file was created
+        output_file = os.path.join(self.output_dir, 'test.h')
+        self.assertTrue(os.path.exists(output_file))
+        self.assertTrue(results[test_file][0])
+
+    def test_process_with_subdirectory_output(self):
+        """Test processing with subdirectories and output dir."""
+        self.test_dir = tempfile.mkdtemp()
+        self.output_dir = tempfile.mkdtemp()
+
+        # Create nested structure
+        subdir = os.path.join(self.test_dir, 'src')
+        os.makedirs(subdir)
+
+        test_file = os.path.join(subdir, 'helper.cpp')
+        with open(test_file, 'w') as f:
+            f.write('void helper() {}\n')
+
+        results = self.processor.process_directory(
+            self.test_dir,
+            output_dir=self.output_dir,
+            dry_run=False,
+            recursive=True
+        )
+
+        # Check that nested structure is preserved
+        output_file = os.path.join(self.output_dir, 'src', 'helper.cpp')
+        self.assertTrue(os.path.exists(output_file))
+
+    def test_enhance_existing_in_processor(self):
+        """Test DirectoryProcessor with enhance_existing flag."""
+        processor_enhance = DirectoryProcessor(enhance_existing=True)
+        self.assertTrue(processor_enhance.generator.enhance_existing)
+
+        processor_normal = DirectoryProcessor(enhance_existing=False)
+        self.assertFalse(processor_normal.generator.enhance_existing)
+
+    def test_process_project_method(self):
+        """Test process_project method."""
+        self.test_dir = tempfile.mkdtemp()
+
+        # Create standard project structure
+        src_dir = os.path.join(self.test_dir, 'src')
+        include_dir = os.path.join(self.test_dir, 'include')
+        os.makedirs(src_dir)
+        os.makedirs(include_dir)
+
+        # Create test files
+        with open(os.path.join(src_dir, 'main.cpp'), 'w') as f:
+            f.write('int main() { return 0; }\n')
+
+        with open(os.path.join(include_dir, 'header.h'), 'w') as f:
+            f.write('class Header {};\n')
+
+        results = self.processor.process_project(self.test_dir, dry_run=True)
+
+        # Should process both directories
+        self.assertGreater(len(results), 0)
+        # Find the files in results
+        found_main = any('main.cpp' in path for path in results.keys())
+        found_header = any('header.h' in path for path in results.keys())
+        self.assertTrue(found_main or found_header)
+
+    def test_process_project_no_standard_dirs(self):
+        """Test process_project when no standard directories exist."""
+        self.test_dir = tempfile.mkdtemp()
+
+        results = self.processor.process_project(self.test_dir)
+
+        self.assertIn('_info', results)
+        self.assertFalse(results['_info'][0])
+        self.assertIn('No standard source directories', results['_info'][1])
+
+    def test_process_project_nonexistent(self):
+        """Test process_project with non-existent directory."""
+        with self.assertRaises(ValueError) as context:
+            self.processor.process_project('/nonexistent/project/root')
+        self.assertIn('does not exist', str(context.exception))
+
+    def test_print_results_method(self):
+        """Test print_results method."""
+        results = {
+            '/path/to/file1.cpp': (True, 'Processed successfully'),
+            '/path/to/file2.h': (True, 'Processed successfully (Test file: GoogleTest)'),
+            '/path/to/file3.cpp': (False, 'Error: Parse error'),
+            '_info': (False, 'Some info message')
+        }
+
+        # Capture stdout
+        from io import StringIO
+        import sys
+        captured_output = StringIO()
+        sys.stdout = captured_output
+
+        try:
+            self.processor.print_results(results)
+            output = captured_output.getvalue()
+
+            # Check that output contains expected elements
+            self.assertIn('Processing Results', output)
+            self.assertIn('file1.cpp', output)
+            self.assertIn('file2.h', output)
+            self.assertIn('file3.cpp', output)
+            self.assertIn('Error: Parse error', output)
+            self.assertIn('succeeded', output)
+            self.assertIn('failed', output)
+        finally:
+            sys.stdout = sys.__stdout__
+
+    def test_process_directory_in_place(self):
+        """Test processing files in place (no output_dir)."""
+        self.test_dir = tempfile.mkdtemp()
+
+        test_file = os.path.join(self.test_dir, 'test.h')
+        original_content = 'class Test {};\n'
+        with open(test_file, 'w') as f:
+            f.write(original_content)
+
+        results = self.processor.process_directory(self.test_dir, dry_run=False, recursive=False)
+
+        # File should be modified in place
+        with open(test_file, 'r') as f:
+            new_content = f.read()
+
+        self.assertNotEqual(original_content, new_content)
+        self.assertTrue(results[test_file][0])
+
+    def test_process_directory_error_handling(self):
+        """Test error handling during directory processing."""
+        self.test_dir = tempfile.mkdtemp()
+
+        # Create a file with problematic content that might cause issues
+        test_file = os.path.join(self.test_dir, 'test.cpp')
+        with open(test_file, 'w') as f:
+            f.write('invalid c++ syntax {{{{')
+
+        results = self.processor.process_directory(self.test_dir, dry_run=False, recursive=False)
+
+        # Should still return results, possibly with errors
+        self.assertIn(test_file, results)
+
+
 if __name__ == "__main__":
     unittest.main()

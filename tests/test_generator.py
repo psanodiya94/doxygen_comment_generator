@@ -218,5 +218,158 @@ private:
         self.assertIn(self.generator._generate_brief_description("customFunc").lower(), ["custom func"])
 
 
+class TestHeaderDoxygenGeneratorExtended(unittest.TestCase):
+    """Extended tests for header generator to improve coverage."""
+
+    def setUp(self):
+        """Set up test fixtures."""
+        self.generator = HeaderDoxygenGenerator()
+        self.generator_enhance = HeaderDoxygenGenerator(enhance_existing=True)
+
+    def test_invalid_file_extension(self):
+        """Test that invalid file extensions raise ValueError."""
+        with self.assertRaises(ValueError) as context:
+            self.generator.parse_header("test.cpp")
+        self.assertIn("Only C++ header files are supported", str(context.exception))
+
+    @patch("builtins.open", new_callable=mock_open, read_data="""
+namespace MyNamespace {
+class Test {};
+}
+""")
+    def test_namespace_handling(self, mock_file):
+        """Test namespace tracking and formatting."""
+        result = self.generator.parse_header("test.h")
+        result_str = ''.join(result)
+        self.assertIn('namespace MyNamespace', result_str)
+
+    @patch("builtins.open", new_callable=mock_open, read_data="""
+/**
+ * @brief Existing comment for class
+ */
+class Test {
+public:
+    void method();
+};
+""")
+    def test_existing_comment_skip_mode(self, mock_file):
+        """Test that existing comments are preserved in skip mode."""
+        result = self.generator.parse_header("test.h")
+        result_str = ''.join(result)
+        # Should preserve the existing comment
+        self.assertIn('Existing comment for class', result_str)
+        # Count @brief occurrences (original comment)
+        brief_count = result_str.count('@brief')
+        # Should have at least the original @brief
+        self.assertGreaterEqual(brief_count, 1)
+
+    @patch("builtins.open", new_callable=mock_open, read_data="""
+/**
+ * @brief Existing comment
+ */
+class Test {};
+""")
+    def test_existing_comment_enhance_mode(self, mock_file):
+        """Test existing comment enhancement mode."""
+        result = self.generator_enhance.parse_header("test.h")
+        result_str = ''.join(result)
+        # Should keep the existing comment
+        self.assertIn('Existing comment', result_str)
+
+    @patch("builtins.open", new_callable=mock_open, read_data="""
+/// Single line Doxygen comment
+void function();
+""")
+    def test_single_line_doxygen_comment(self, mock_file):
+        """Test handling of single-line Doxygen comments."""
+        result = self.generator.parse_header("test.h")
+        result_str = ''.join(result)
+        self.assertIn('Single line Doxygen comment', result_str)
+
+    @patch("builtins.open", new_callable=mock_open, read_data="""
+class Base {
+public:
+    virtual void method() = 0;
+protected:
+    int value;
+private:
+    bool flag;
+};
+""")
+    def test_multiple_access_specifiers(self, mock_file):
+        """Test handling of multiple access specifiers."""
+        result = self.generator.parse_header("test.h")
+        result_str = ''.join(result)
+        self.assertIn('public:', result_str)
+        self.assertIn('protected:', result_str)
+        self.assertIn('private:', result_str)
+
+    @patch("builtins.open", new_callable=mock_open, read_data="""
+template<typename T>
+class Template {
+public:
+    T getValue();
+};
+""")
+    def test_template_class(self, mock_file):
+        """Test handling of template classes."""
+        result = self.generator.parse_header("test.h")
+        result_str = ''.join(result)
+        self.assertIn('template', result_str.lower())
+
+    @patch("builtins.open", new_callable=mock_open, read_data="""
+struct SimpleStruct {
+    int x;
+    int y;
+};
+""")
+    def test_struct_declaration(self, mock_file):
+        """Test struct declarations."""
+        result = self.generator.parse_header("test.h")
+        result_str = ''.join(result)
+        self.assertIn('SimpleStruct', result_str)
+        self.assertIn('struct', result_str)
+
+    @patch("builtins.open", new_callable=mock_open, read_data="""
+class Outer {
+    class Inner {
+        void method();
+    };
+};
+""")
+    def test_nested_classes(self, mock_file):
+        """Test nested class handling."""
+        result = self.generator.parse_header("test.h")
+        result_str = ''.join(result)
+        self.assertIn('Outer', result_str)
+        self.assertIn('Inner', result_str)
+
+    @patch("builtins.open", new_callable=mock_open, read_data="""
+enum class Color : uint8_t {
+    Red,
+    Green,
+    Blue
+};
+""")
+    def test_enum_class_with_type(self, mock_file):
+        """Test enum class with underlying type."""
+        result = self.generator.parse_header("test.h")
+        result_str = ''.join(result)
+        self.assertIn('Color', result_str)
+
+    @patch("builtins.open", new_callable=mock_open, read_data="""
+void functionWithLongParams(
+    int param1,
+    double param2,
+    const std::string& param3
+);
+""")
+    def test_multiline_function_params(self, mock_file):
+        """Test function with parameters split across lines."""
+        result = self.generator.parse_header("test.h")
+        result_str = ''.join(result)
+        self.assertIn('functionWithLongParams', result_str)
+
+
 if __name__ == "__main__":
     unittest.main()

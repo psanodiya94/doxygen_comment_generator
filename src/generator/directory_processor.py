@@ -26,9 +26,7 @@ class DirectoryProcessor:
             enhance_existing: If True, enhance existing Doxygen comments instead of skipping them
         """
         self.enhance_existing = enhance_existing
-        self.generator = CppSourceGenerator()
-        if enhance_existing:
-            self.generator.skip_existing_comments = False
+        self.generator = CppSourceGenerator(enhance_existing=enhance_existing)
 
     def find_cpp_files(self, directory: str, recursive: bool = True) -> List[str]:
         """
