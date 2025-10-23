@@ -3,13 +3,17 @@ from typing import List, Dict, Optional, Tuple
 
 
 class HeaderDoxygenGenerator:
-    def __init__(self):
+    def __init__(self, enhance_existing: bool = False):
         """
         Initialize the HeaderDoxygenGenerator.
         Tracks the current class and namespace for context-aware comment generation.
+
+        Args:
+            enhance_existing: If True, enhance existing Doxygen comments instead of skipping them
         """
         self.current_class = None
         self.current_namespace = None
+        self.enhance_existing = enhance_existing
 
 
     def parse_header(self, filename: str) -> List[str]:
@@ -50,16 +54,33 @@ class HeaderDoxygenGenerator:
                 i += 1
                 continue
 
-            # Skip existing Doxygen comments (do not duplicate)
+            # Handle existing Doxygen comments
             if stripped.startswith('/**') or stripped.startswith('///') or stripped.startswith('/*!'):
-                while i < len(lines) and '*/' not in lines[i]:
-                    output.append(lines[i])
-                    i += 1
-                if i < len(lines):
-                    output.append(lines[i])
-                    i += 1
-                last_was_decl = False
-                continue
+                if not self.enhance_existing:
+                    # Skip existing comments (default behavior)
+                    while i < len(lines) and '*/' not in lines[i]:
+                        output.append(lines[i])
+                        i += 1
+                    if i < len(lines):
+                        output.append(lines[i])
+                        i += 1
+                    last_was_decl = False
+                    continue
+                else:
+                    # Extract and enhance existing comment
+                    existing_comment_lines = []
+                    comment_start = i
+                    while i < len(lines) and '*/' not in lines[i]:
+                        existing_comment_lines.append(lines[i])
+                        i += 1
+                    if i < len(lines):
+                        existing_comment_lines.append(lines[i])
+                        i += 1
+
+                    # Keep the existing comment but mark that we should enhance the following declaration
+                    output.extend(existing_comment_lines)
+                    last_was_decl = False
+                    continue
 
             # Handle namespace declaration (track for context)
             namespace_match = re.match(r'namespace\s+(\w+)\s*\{', stripped)
