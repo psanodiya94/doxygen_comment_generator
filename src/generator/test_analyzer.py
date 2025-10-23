@@ -1,6 +1,6 @@
 """
 Test Case Analyzer for extracting test information and generating meaningful documentation.
-Supports popular C++ testing frameworks: Google Test, Catch2, doctest, Boost.Test, and more.
+Supports popular C++ testing frameworks: Google Test, Catch2, doctest, Boost.Test, CppUnit, and more.
 """
 
 import re
@@ -11,10 +11,10 @@ from dataclasses import dataclass
 @dataclass
 class TestInfo:
     """Information about a detected test case."""
-    framework: str  # 'gtest', 'catch2', 'doctest', 'boost', 'custom'
+    framework: str  # 'gtest', 'catch2', 'doctest', 'boost', 'cppunit', 'custom'
     test_name: str
     test_suite: Optional[str] = None
-    test_type: str = 'TEST'  # TEST, TEST_F, TEST_P, SCENARIO, etc.
+    test_type: str = 'TEST'  # TEST, TEST_F, TEST_P, SCENARIO, CPPUNIT_TEST, etc.
     fixture_class: Optional[str] = None
     assertions: List[str] = None
     description: Optional[str] = None
@@ -60,6 +60,13 @@ class TestCaseAnalyzer:
         r'BOOST_AUTO_TEST_SUITE\s*\(\s*(\w+)\s*\)',                     # BOOST_AUTO_TEST_SUITE(suite_name)
     ]
 
+    # CppUnit patterns
+    CPPUNIT_PATTERNS = [
+        r'CPPUNIT_TEST\s*\(\s*(\w+)\s*\)',                              # CPPUNIT_TEST(testMethod)
+        r'CPPUNIT_TEST_SUITE\s*\(\s*(\w+)\s*\)',                        # CPPUNIT_TEST_SUITE(TestClassName)
+        r'void\s+(\w+)\s*\(\s*\)\s*{',                                  # void testMethod() { (in test class)
+    ]
+
     # Common assertion patterns across frameworks
     ASSERTION_PATTERNS = {
         'gtest': [
@@ -80,6 +87,11 @@ class TestCaseAnalyzer:
         'boost': [
             r'BOOST_CHECK', r'BOOST_REQUIRE', r'BOOST_CHECK_EQUAL', r'BOOST_REQUIRE_EQUAL',
             r'BOOST_CHECK_THROW', r'BOOST_REQUIRE_THROW', r'BOOST_CHECK_NO_THROW',
+        ],
+        'cppunit': [
+            r'CPPUNIT_ASSERT', r'CPPUNIT_ASSERT_EQUAL', r'CPPUNIT_ASSERT_DOUBLES_EQUAL',
+            r'CPPUNIT_ASSERT_THROW', r'CPPUNIT_ASSERT_NO_THROW', r'CPPUNIT_ASSERT_MESSAGE',
+            r'CPPUNIT_FAIL', r'CPPUNIT_ASSERT_ASSERTION_FAIL', r'CPPUNIT_ASSERT_ASSERTION_PASS',
         ]
     }
 
@@ -95,7 +107,7 @@ class TestCaseAnalyzer:
             lines: Lines from the source file
 
         Returns:
-            Framework name ('gtest', 'catch2', 'doctest', 'boost') or None
+            Framework name ('gtest', 'catch2', 'doctest', 'boost', 'cppunit') or None
         """
         content = '\n'.join(lines)
 
@@ -108,6 +120,8 @@ class TestCaseAnalyzer:
             return 'doctest'
         if re.search(r'#include\s*[<"]boost/test/', content):
             return 'boost'
+        if re.search(r'#include\s*[<"]cppunit/', content):
+            return 'cppunit'
 
         # Check for framework-specific macros
         for pattern in self.GTEST_PATTERNS:
@@ -121,6 +135,10 @@ class TestCaseAnalyzer:
         for pattern in self.BOOST_PATTERNS:
             if re.search(pattern, content):
                 return 'boost'
+
+        for pattern in self.CPPUNIT_PATTERNS:
+            if re.search(pattern, content):
+                return 'cppunit'
 
         return None
 
@@ -144,6 +162,8 @@ class TestCaseAnalyzer:
             return self._parse_catch_doctest_case(lines, start_idx, line, framework)
         elif framework == 'boost':
             return self._parse_boost_case(lines, start_idx, line)
+        elif framework == 'cppunit':
+            return self._parse_cppunit_case(lines, start_idx, line)
 
         return None
 
@@ -225,6 +245,49 @@ class TestCaseAnalyzer:
                 )
 
                 return test_info, body_end
+
+        return None
+
+    def _parse_cppunit_case(self, lines: List[str], start_idx: int, line: str) -> Optional[Tuple[TestInfo, int]]:
+        """Parse CppUnit test case."""
+        # CPPUNIT_TEST macro in test suite definition
+        cppunit_test_pattern = re.compile(r'CPPUNIT_TEST\s*\(\s*(\w+)\s*\)')
+        match = cppunit_test_pattern.search(line)
+        if match:
+            test_name = match.group(1)
+            # This is just a registration macro, actual test is a method
+            # Return basic info without body
+            test_info = TestInfo(
+                framework='cppunit',
+                test_name=test_name,
+                test_type='CPPUNIT_TEST',
+                assertions=[]
+            )
+            return test_info, start_idx
+
+        # CPPUNIT_TEST_SUITE declaration
+        suite_pattern = re.compile(r'CPPUNIT_TEST_SUITE\s*\(\s*(\w+)\s*\)')
+        match = suite_pattern.search(line)
+        if match:
+            # This starts a test suite, skip it
+            return None
+
+        # Test method definition (void testXXX())
+        # Look for methods starting with 'test' in a CppUnit test class
+        test_method_pattern = re.compile(r'void\s+(test\w+)\s*\(\s*\)')
+        match = test_method_pattern.search(line)
+        if match:
+            test_name = match.group(1)
+            body_start, body_end = self._find_test_body(lines, start_idx)
+            assertions = self._extract_assertions(lines[body_start:body_end+1], 'cppunit')
+
+            test_info = TestInfo(
+                framework='cppunit',
+                test_name=test_name,
+                test_type='CPPUNIT_TEST_METHOD',
+                assertions=assertions
+            )
+            return test_info, body_end
 
         return None
 
@@ -350,6 +413,10 @@ class TestCaseAnalyzer:
             'REQUIRE': 'required conditions',
             'CHECK': 'checked conditions',
             'BOOST_CHECK_EQUAL': 'equality validation',
+            'CPPUNIT_ASSERT': 'assertion validation',
+            'CPPUNIT_ASSERT_EQUAL': 'equality assertion',
+            'CPPUNIT_ASSERT_THROW': 'exception throwing validation',
+            'CPPUNIT_ASSERT_NO_THROW': 'no exception validation',
         }
 
         for assertion in test_info.assertions:

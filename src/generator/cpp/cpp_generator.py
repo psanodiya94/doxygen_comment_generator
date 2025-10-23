@@ -15,9 +15,14 @@ class CppSourceGenerator(HeaderDoxygenGenerator):
     Extends HeaderDoxygenGenerator with support for implementation files and test cases.
     """
 
-    def __init__(self):
-        """Initialize the CppSourceGenerator."""
-        super().__init__()
+    def __init__(self, enhance_existing: bool = False):
+        """
+        Initialize the CppSourceGenerator.
+
+        Args:
+            enhance_existing: If True, enhance existing Doxygen comments instead of skipping them
+        """
+        super().__init__(enhance_existing=enhance_existing)
         self.test_analyzer = TestCaseAnalyzer()
         self.is_test_file = False
         self.detected_framework = None
@@ -383,7 +388,8 @@ class CppSourceGenerator(HeaderDoxygenGenerator):
             'gtest': 'Google Test',
             'catch2': 'Catch2',
             'doctest': 'doctest',
-            'boost': 'Boost.Test'
+            'boost': 'Boost.Test',
+            'cppunit': 'CppUnit'
         }
         comment.append(f'{indent} * Framework: {framework_names.get(test_info.framework, test_info.framework)}\n')
 

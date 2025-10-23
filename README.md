@@ -23,6 +23,12 @@ Perfect for documenting unit tests! The tool intelligently detects and documents
 - Documents test suites, fixtures, and test types
 - Perfect for documenting newly written unit tests
 
+### Directory & Project Processing
+- **Process entire directories** - recursively scan and document all C++ files
+- **Project mode** - automatically process `include/` and `src/` directories
+- **Batch processing** - handle hundreds of files at once
+- **Enhance existing comments** - optionally update existing Doxygen comments with more details
+
 ## Installation
 
 1. **Clone the repository:**
@@ -97,6 +103,9 @@ python src/generator/main.py -f tests/test_math.cpp
 
 # Document Catch2 test file
 python src/generator/main.py -f tests/test_string.cpp
+
+# Document CppUnit test file
+python src/generator/main.py -f tests/test_calculator.cpp
 ```
 
 When processing test files, the tool will:
@@ -105,25 +114,76 @@ When processing test files, the tool will:
 - Document what each test covers
 - Include test suite and fixture information
 
+### Directory Processing
+
+Process entire directories or projects:
+
+```sh
+# Process a single directory
+python src/generator/main.py -d src/
+
+# Process a project with include/ and src/ directories
+python src/generator/main.py -p /path/to/project
+
+# Process directory and save to different location
+python src/generator/main.py -d src/ -o documented/
+
+# Dry run to see what would be processed
+python src/generator/main.py -d tests/ --dry-run
+```
+
+### Enhancing Existing Comments
+
+By default, the tool skips files that already have Doxygen comments. To enhance existing comments:
+
+```sh
+# Enhance existing comments in a file
+python src/generator/main.py -f myclass.h --enhance-existing
+
+# Enhance all comments in a directory
+python src/generator/main.py -d src/ --enhance-existing
+```
+
 ## Command-Line Options
 
 The script supports the following options:
 
-- `-f <path_to_file>`: Path to the C++ file to process (header or source, required unless using `--gui`)
-- `-o <path_to_output>`: Path to output file (default: overwrites input file)
-- `--dry-run`: Print output to console instead of writing to file
+### Input Options
+- `-f <path_to_file>`: Path to a single C++ file to process (header or source)
+- `-d <directory>`: Path to a directory containing C++ files
+- `-p <project_root>`: Path to project root (automatically processes `include/` and `src/` directories)
+
+### Output Options
+- `-o <path>`: Path to output file or directory (default: overwrites input in place)
+- `--dry-run`: Print output to console instead of writing to files
+
+### Processing Options
+- `--enhance-existing`: Enhance existing Doxygen comments instead of skipping them
+- `--recursive`: Process directories recursively (default: True)
+- `--no-recursive`: Don't process directories recursively
 - `--test-mode`: Enable specialized test case documentation mode
+
+### Interface Options
 - `--gui`: Launch graphical interface for file selection and comment generation (requires Tkinter)
 - `-h`, `--help`: Show help message and exit
 
 **Example usage:**
 
 ```sh
-# Process and preview output without modifying file
+# Process a single file and preview output
 python src/generator/main.py -f myfile.cpp --dry-run
 
-# Save to a different file
-python src/generator/main.py -f myfile.h -o myfile_documented.h
+# Process entire directory
+python src/generator/main.py -d src/
+
+# Process project (include/ and src/ directories)
+python src/generator/main.py -p /path/to/project
+
+# Enhance existing comments in a file
+python src/generator/main.py -f myfile.h --enhance-existing
+
+# Save to a different location
+python src/generator/main.py -d src/ -o documented/
 
 # Use GUI mode
 python src/generator/main.py --gui
@@ -256,6 +316,7 @@ TEST_F(CalculatorTest, TestMultiplication) {
 - **Catch2** - TEST_CASE, SCENARIO, SECTION, etc.
 - **doctest** - TEST_CASE, SCENARIO, TEST_SUITE, etc.
 - **Boost.Test** - BOOST_AUTO_TEST_CASE, BOOST_FIXTURE_TEST_CASE, etc.
+- **CppUnit** - CPPUNIT_TEST, test methods in CPPUNIT_TEST_SUITE, etc.
 
 The tool automatically detects the framework by analyzing include directives and test macros.
 
@@ -274,3 +335,34 @@ Check the `sample/` directory for example files:
 - `SampleHeader.h` - Example header file with various C++ constructs
 - `test_example_gtest.cpp` - Example Google Test file
 - `test_example_catch2.cpp` - Example Catch2 test file
+- `test_example_cppunit.cpp` - Example CppUnit test file
+
+## Real-World Usage Examples
+
+### Example 1: Document All Tests in a Project
+
+```sh
+# Process all test files in a project
+python src/generator/main.py -d tests/ --recursive
+
+# Result: All test files documented with framework-specific comments
+```
+
+### Example 2: Enhance Existing Documentation
+
+```sh
+# Your team has partial documentation, enhance it
+python src/generator/main.py -p /path/to/project --enhance-existing
+
+# Result: Existing comments preserved and enhanced with more details
+```
+
+### Example 3: Document New Feature Branch
+
+```sh
+# Document all new code in include/ and src/
+python src/generator/main.py -p . --dry-run
+
+# Review the output, then apply
+python src/generator/main.py -p .
+```
