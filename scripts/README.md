@@ -8,13 +8,14 @@ A comprehensive test runner with clean, attractive output and optional coverage 
 
 ### Features
 
-- **Auto-installation**: Automatically installs pytest if not found (no manual setup needed!)
+- **Unittest Fallback**: Automatically falls back to unittest if pytest is not installed
+- **Optional Auto-installation**: Can install pytest automatically with --install-deps flag
 - Clean, colorful output with ANSI colors
 - Progress indicators and test results
-- Optional coverage reporting with HTML output
+- Optional coverage reporting with HTML output (requires pytest)
 - Automatic dependency checking
 - Easy to use command-line interface
-- Works on any machine, even without pytest pre-installed
+- Works on any machine - even without pytest!
 
 ### Usage
 
@@ -58,41 +59,41 @@ python3 scripts/run_tests.py -c -v tests/test_cpp_generator.py
 
 #### Install Dependencies
 
-The script automatically installs pytest if it's not found. You can also manually install dependencies:
+To install pytest and pytest-cov:
 ```bash
 python3 scripts/run_tests.py --install-deps
 ```
 
-To prevent automatic installation:
+or
+
 ```bash
-python3 scripts/run_tests.py --no-auto-install
+python3 scripts/run_tests.py --auto-install
 ```
+
+Both flags will install pytest if missing and then run the tests.
 
 ### Options
 
-- `-c, --coverage`: Run tests with coverage reporting
+- `-c, --coverage`: Run tests with coverage reporting (requires pytest)
 - `-v, --verbose`: Verbose output (show each test)
-- `--install-deps`: Install test dependencies and exit (pytest, pytest-cov)
-- `--no-auto-install`: Do not automatically install missing dependencies
+- `--install-deps`: Install pytest/pytest-cov if missing and run tests
+- `--auto-install`: Same as --install-deps
 - `-h, --help`: Show help message
 
 ### Examples
 
 ```bash
-# Run all tests (auto-installs pytest if not found)
+# Run all tests (uses unittest if pytest not available)
 python3 scripts/run_tests.py
 
-# Run tests with coverage
-python3 scripts/run_tests.py --coverage
+# Run tests with coverage (installs pytest if needed)
+python3 scripts/run_tests.py --install-deps --coverage
 
 # Run specific test file with coverage
-python3 scripts/run_tests.py -c tests/test_generator.py
+python3 scripts/run_tests.py --auto-install -c tests/test_generator.py
 
-# Install dependencies only (useful for CI/CD setup)
+# Just install dependencies
 python3 scripts/run_tests.py --install-deps
-
-# Run without auto-installing dependencies
-python3 scripts/run_tests.py --no-auto-install
 ```
 
 ### Output
@@ -107,6 +108,6 @@ The script provides:
 ### Requirements
 
 - Python 3.7+
-- pip (for auto-installing dependencies)
+- pip (for installing pytest with --install-deps flag)
 
-**Note**: pytest and pytest-cov are automatically installed if not found. You don't need to install them manually unless you use the `--no-auto-install` flag.
+**Note**: The script will use unittest (built into Python) if pytest is not installed. For coverage reporting and advanced features, use `--install-deps` to install pytest and pytest-cov.

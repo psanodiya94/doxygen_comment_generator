@@ -133,24 +133,70 @@ def install_dependencies(with_coverage=False):
         return False
 
 
-def run_tests(with_coverage=False, verbose=False, test_path=None, auto_install=True):
+def run_tests_with_unittest(test_path=None):
+    """Run tests using unittest as fallback"""
+    print_section("Running Tests with unittest", Colors.OKBLUE)
+    print_info("pytest not found, falling back to unittest\n")
+
+    import os
+    import unittest
+
+    # Determine test path
+    if test_path:
+        test_location = test_path
+    else:
+        test_location = 'tests'
+
+    # Discover and run tests
+    loader = unittest.TestLoader()
+    if os.path.isfile(test_location):
+        # Load specific test file
+        suite = loader.discover(os.path.dirname(test_location),
+                               pattern=os.path.basename(test_location))
+    else:
+        # Load all tests from directory
+        suite = loader.discover(test_location, pattern='test_*.py')
+
+    runner = unittest.TextTestRunner(verbosity=2)
+    result = runner.run(suite)
+
+    # Print results
+    print_section("Test Results", Colors.OKBLUE)
+
+    if result.wasSuccessful():
+        print_success(f"All tests passed! ✨")
+        print_success(f"Ran {result.testsRun} tests")
+        print_banner("SUCCESS", Colors.OKGREEN)
+        return True
+    else:
+        print_error(f"Some tests failed")
+        print_info(f"Failures: {len(result.failures)}")
+        print_info(f"Errors: {len(result.errors)}")
+        print_banner("FAILED", Colors.FAIL)
+        return False
+
+
+def run_tests(with_coverage=False, verbose=False, test_path=None, auto_install=False):
     """Run the test suite"""
     print_banner("🧪 DOXYGEN COMMENT GENERATOR TEST SUITE 🧪", Colors.HEADER)
 
     # Check dependencies
-    if not check_dependencies():
+    pytest_available = check_dependencies()
+
+    if not pytest_available:
         if auto_install:
             print_info("\nAttempting to install missing dependencies...")
             if not install_dependencies(with_coverage=with_coverage):
                 print_error("\nFailed to install dependencies automatically.")
-                print_info("Please install manually: pip install pytest pytest-cov")
-                return False
+                print_info("Falling back to unittest...")
+                return run_tests_with_unittest(test_path)
             print()
+            # Re-check after installation
+            pytest_available = True
         else:
-            print_error("\nMissing required dependencies.")
-            print_info("Install with: pip install pytest pytest-cov")
-            print_info("Or run with --install-deps flag")
-            return False
+            print_info("\npytest not installed. Use --install-deps to install it.")
+            print_info("Falling back to unittest (coverage not available)...\n")
+            return run_tests_with_unittest(test_path)
 
     # Build pytest command
     cmd_parts = ['python3', '-m', 'pytest']
@@ -212,15 +258,15 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  %(prog)s                    # Run all tests (auto-installs pytest if missing)
-  %(prog)s --coverage         # Run tests with coverage report
+  %(prog)s                    # Run all tests (uses unittest if pytest missing)
+  %(prog)s --coverage         # Run tests with coverage report (requires pytest)
   %(prog)s -c -v              # Run with coverage and verbose output
   %(prog)s tests/test_generator.py  # Run specific test file
-  %(prog)s --install-deps     # Install dependencies and exit
-  %(prog)s --no-auto-install  # Don't auto-install if pytest is missing
+  %(prog)s --install-deps     # Install pytest and pytest-cov, then run tests
+  %(prog)s --auto-install     # Auto-install pytest if missing
 
-Note: The script will automatically install pytest if it's not found, unless
-      the --no-auto-install flag is used.
+Note: The script uses unittest as fallback if pytest is not installed.
+      Use --install-deps or --auto-install to install pytest automatically.
         """
     )
 
@@ -245,13 +291,13 @@ Note: The script will automatically install pytest if it's not found, unless
     parser.add_argument(
         '--install-deps',
         action='store_true',
-        help='Install test dependencies and exit (pytest, pytest-cov)'
+        help='Automatically install pytest/pytest-cov if missing and run tests'
     )
 
     parser.add_argument(
-        '--no-auto-install',
+        '--auto-install',
         action='store_true',
-        help='Do not automatically install missing dependencies'
+        help='Automatically install pytest if missing (same as --install-deps)'
     )
 
     args = parser.parse_args()
@@ -262,19 +308,15 @@ Note: The script will automatically install pytest if it's not found, unless
     import os
     os.chdir(project_root)
 
-    # Install dependencies if requested and exit
-    if args.install_deps:
-        if install_dependencies(with_coverage=True):
-            return 0
-        else:
-            return 1
+    # Determine if we should auto-install
+    auto_install = args.install_deps or args.auto_install
 
     # Run tests
     success = run_tests(
         with_coverage=args.coverage,
         verbose=args.verbose,
         test_path=args.test_path,
-        auto_install=not args.no_auto_install
+        auto_install=auto_install
     )
 
     return 0 if success else 1
