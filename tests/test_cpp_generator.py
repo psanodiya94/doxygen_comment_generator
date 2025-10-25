@@ -294,5 +294,286 @@ TEST(MathUtils, TestAddition) {
         self.assertIn('TestAddition', result_str)
 
 
+class TestCppGeneratorExtended(unittest.TestCase):
+    """Extended tests for CppSourceGenerator to improve coverage."""
+
+    def setUp(self):
+        """Set up test fixtures."""
+        self.generator = CppSourceGenerator()
+        self.analyzer = TestCaseAnalyzer()
+
+    def test_cc_file_extension(self):
+        """Test .cc file extension support."""
+        with patch("builtins.open", mock_open(read_data="void foo() {}")):
+            result = self.generator.parse_source("test.cc")
+            self.assertIsNotNone(result)
+
+    def test_cxx_file_extension(self):
+        """Test .cxx file extension support."""
+        with patch("builtins.open", mock_open(read_data="void foo() {}")):
+            result = self.generator.parse_source("test.cxx")
+            self.assertIsNotNone(result)
+
+    def test_invalid_file_extension(self):
+        """Test that invalid file extension raises error."""
+        with self.assertRaises(ValueError):
+            self.generator.parse_source("test.txt")
+
+    def test_boost_test_framework(self):
+        """Test Boost.Test framework detection."""
+        test_data = """
+#include <boost/test/unit_test.hpp>
+
+BOOST_AUTO_TEST_CASE(test_case) {
+    BOOST_CHECK(true);
+}
+"""
+        with patch("builtins.open", mock_open(read_data=test_data)):
+            result = self.generator.parse_source("test.cpp")
+            self.assertTrue(self.generator.is_test_file)
+            self.assertEqual(self.generator.detected_framework, 'boost')
+
+    def test_doctest_framework(self):
+        """Test doctest framework detection."""
+        test_data = """
+#define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
+#include <doctest/doctest.h>
+
+TEST_CASE("test case") {
+    CHECK(1 == 1);
+}
+"""
+        with patch("builtins.open", mock_open(read_data=test_data)):
+            result = self.generator.parse_source("test.cpp")
+            self.assertTrue(self.generator.is_test_file)
+            self.assertEqual(self.generator.detected_framework, 'doctest')
+
+    def test_generate_test_description_variations(self):
+        """Test various test name patterns."""
+        from generator.test_analyzer import TestInfo
+
+        test_cases = [
+            "testBasicFunctionality",
+            "test_edge_cases",
+            "TestWithNumbers123",
+            "ALLCAPS_TEST",
+        ]
+
+        for test_name in test_cases:
+            test_info = TestInfo(
+                framework='gtest',
+                test_name=test_name,
+                test_suite='TestSuite',
+                test_type='TEST',
+                assertions=['EXPECT_TRUE']
+            )
+            description = self.analyzer.generate_test_description(test_info)
+            self.assertIsInstance(description, str)
+            self.assertGreater(len(description), 0)
+
+    def test_mixed_content_file(self):
+        """Test file with both classes and namespaces."""
+        test_data = """
+class Calculator {
+public:
+    int add(int a, int b);
+    int subtract(int a, int b);
+};
+
+namespace Math {
+    double sqrt(double x);
+}
+"""
+        with patch("builtins.open", mock_open(read_data=test_data)):
+            result = self.generator.parse_source("calculator.cpp")
+            result_str = ''.join(result)
+            self.assertIn('Calculator', result_str)
+            self.assertIn('Math', result_str)
+            self.assertIn('add', result_str)
+            self.assertIn('sqrt', result_str)
+
+    def test_multiple_test_suites(self):
+        """Test multiple test suites in one file."""
+        test_data = """
+#include <gtest/gtest.h>
+
+TEST(Suite, Case1) {
+    EXPECT_TRUE(true);
+}
+
+TEST(Suite, Case2) {
+    ASSERT_FALSE(false);
+}
+
+TEST(AnotherSuite, Case1) {
+    EXPECT_EQ(1, 1);
+}
+"""
+        with patch("builtins.open", mock_open(read_data=test_data)):
+            result = self.generator.parse_source("multi_test.cpp")
+            result_str = ''.join(result)
+            self.assertIn('Suite', result_str)
+            self.assertIn('AnotherSuite', result_str)
+            self.assertIn('Case1', result_str)
+            self.assertIn('Case2', result_str)
+
+    def test_framework_name_mapping(self):
+        """Test that framework names are properly formatted."""
+        framework_map = {
+            'gtest': 'Google Test',
+            'catch2': 'Catch2',
+            'boost': 'Boost.Test',
+            'cppunit': 'CppUnit',
+            'doctest': 'doctest'
+        }
+
+        for key, expected_name in framework_map.items():
+            lines = [f'#include <{key}/test.h>']
+            detected = self.analyzer.detect_test_framework(lines)
+            if detected:
+                self.assertIn(key, detected.lower())
+
+    def test_non_test_cpp_file(self):
+        """Test non-test C++ source file."""
+        test_data = """
+#include <iostream>
+
+int add(int a, int b) {
+    return a + b;
+}
+
+class Calculator {
+public:
+    int multiply(int x, int y);
+};
+"""
+        # Use a fresh generator to avoid state contamination
+        generator = CppSourceGenerator()
+        with patch("builtins.open", mock_open(read_data=test_data)):
+            result = generator.parse_source("utility.cpp")
+            self.assertFalse(generator.is_test_file)
+            self.assertIsNone(generator.detected_framework)
+
+    def test_empty_test_body(self):
+        """Test handling of empty test body."""
+        lines = ['TEST(Empty, Test) {}']
+        start, end = self.analyzer._find_test_body(lines, 0)
+        self.assertIsNotNone(start)
+        self.assertIsNotNone(end)
+
+    def test_test_with_existing_comments(self):
+        """Test handling of tests that already have comments."""
+        test_data = """
+// Comment before test
+TEST(Documented, Already) {
+    // Test implementation
+    EXPECT_TRUE(true);
+}
+"""
+        with patch("builtins.open", mock_open(read_data=test_data)):
+            result = self.generator.parse_source("commented_test.cpp")
+            result_str = ''.join(result)
+            self.assertIn('Comment before test', result_str)
+            self.assertIn('TEST', result_str)
+
+    def test_parse_gtest_parametrized(self):
+        """Test parsing of parameterized Google Test cases."""
+        lines = [
+            'TEST_P(ParameterizedTest, TestCase) {',
+            '    int value = GetParam();',
+            '    EXPECT_GT(value, 0);',
+            '}'
+        ]
+        # This should detect as gtest
+        framework = self.analyzer.detect_test_framework(lines)
+        self.assertEqual(framework, 'gtest')
+
+    def test_catch2_scenario_syntax(self):
+        """Test Catch2 SCENARIO/GIVEN/WHEN/THEN syntax."""
+        test_data = """
+#include <catch2/catch.hpp>
+
+SCENARIO("testing scenarios") {
+    GIVEN("a precondition") {
+        WHEN("something happens") {
+            THEN("result is expected") {
+                REQUIRE(true);
+            }
+        }
+    }
+}
+"""
+        with patch("builtins.open", mock_open(read_data=test_data)):
+            result = self.generator.parse_source("scenario_test.cpp")
+            result_str = ''.join(result)
+            self.assertTrue(self.generator.is_test_file)
+            # Check if either 'Catch2' or 'catch2' appears in the result
+            result_lower = result_str.lower()
+            self.assertTrue('catch2' in result_lower or 'catch' in result_lower,
+                          f"Expected 'catch2' or 'catch' in result but got: {result_str[:200]}")
+
+
+class TestTestAnalyzerExtended(unittest.TestCase):
+    """Extended tests for TestCaseAnalyzer."""
+
+    def setUp(self):
+        """Set up test fixtures."""
+        self.analyzer = TestCaseAnalyzer()
+
+    def test_framework_detection_order(self):
+        """Test that framework detection works with various patterns."""
+        test_cases = [
+            (['#include <gtest/gtest.h>'], 'gtest'),
+            (['#include <catch2/catch.hpp>'], 'catch2'),
+            (['#include <boost/test/unit_test.hpp>'], 'boost'),
+            (['#include <cppunit/TestCase.h>'], 'cppunit'),
+            (['#include <doctest/doctest.h>'], 'doctest'),  # doctest requires doctest/ prefix
+        ]
+
+        for lines, expected_framework in test_cases:
+            detected = self.analyzer.detect_test_framework(lines)
+            self.assertEqual(detected, expected_framework,
+                           f"Failed to detect {expected_framework} from {lines}")
+
+    def test_no_framework_detected(self):
+        """Test when no test framework is present."""
+        lines = ['#include <iostream>', 'int main() { return 0; }']
+        detected = self.analyzer.detect_test_framework(lines)
+        self.assertIsNone(detected)
+
+    def test_test_name_with_special_characters(self):
+        """Test handling of test names with special characters."""
+        from generator.test_analyzer import TestInfo
+
+        test_names = [
+            'Test_With_Underscores',
+            'TestWithNumber123',
+            'test123',
+            'UPPERCASE_TEST'
+        ]
+
+        for name in test_names:
+            test_info = TestInfo(
+                framework='gtest',
+                test_name=name,
+                test_suite='TestSuite',
+                test_type='TEST',
+                assertions=['EXPECT_TRUE']
+            )
+            description = self.analyzer.generate_test_description(test_info)
+            self.assertIsInstance(description, str)
+            self.assertGreater(len(description), 0)
+
+    def test_complex_assertion_patterns(self):
+        """Test extraction of complex assertion patterns."""
+        body_lines = [
+            '    EXPECT_THAT(value, testing::Gt(0));',
+            '    ASSERT_NO_THROW({ doSomething(); });',
+            '    EXPECT_STREQ("hello", str.c_str());',
+        ]
+        assertions = self.analyzer._extract_assertions(body_lines, 'gtest')
+        self.assertGreater(len(assertions), 0)
+
+
 if __name__ == "__main__":
     unittest.main()

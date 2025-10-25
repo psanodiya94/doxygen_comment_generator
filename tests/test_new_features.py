@@ -407,10 +407,16 @@ class TestDirectoryProcessorExtended(unittest.TestCase):
 
     def test_print_results_method(self):
         """Test print_results method."""
+        # Use os-agnostic paths for Windows compatibility
+        import os
+        file1 = os.path.join('path', 'to', 'file1.cpp')
+        file2 = os.path.join('path', 'to', 'file2.h')
+        file3 = os.path.join('path', 'to', 'file3.cpp')
+
         results = {
-            '/path/to/file1.cpp': (True, 'Processed successfully'),
-            '/path/to/file2.h': (True, 'Processed successfully (Test file: GoogleTest)'),
-            '/path/to/file3.cpp': (False, 'Error: Parse error'),
+            file1: (True, 'Processed successfully'),
+            file2: (True, 'Processed successfully (Test file: GoogleTest)'),
+            file3: (False, 'Error: Parse error'),
             '_info': (False, 'Some info message')
         }
 
