@@ -143,8 +143,14 @@ class TestDirectoryProcessing(unittest.TestCase):
         results = self.processor.process_directory(self.test_dir, dry_run=True, recursive=False)
 
         self.assertEqual(len(results), 1)
-        self.assertTrue(results[test_file][0])  # Success
-        self.assertIn('dry run', results[test_file][1].lower())
+        # Normalize paths for Windows compatibility
+        normalized_test_file = os.path.normcase(os.path.abspath(test_file))
+        result_keys = [os.path.normcase(os.path.abspath(k)) for k in results.keys()]
+        self.assertIn(normalized_test_file, result_keys)
+        # Get the actual key from results
+        actual_key = list(results.keys())[0]
+        self.assertTrue(results[actual_key][0])  # Success
+        self.assertIn('dry run', results[actual_key][1].lower())
 
     def test_skip_build_directories(self):
         """Test that build directories are skipped."""
@@ -328,8 +334,14 @@ class TestDirectoryProcessorExtended(unittest.TestCase):
 
         # Check that output file was created
         output_file = os.path.join(self.output_dir, 'test.h')
-        self.assertTrue(os.path.exists(output_file))
-        self.assertTrue(results[test_file][0])
+        self.assertTrue(os.path.exists(output_file),
+                       f"Output file not found: {output_file}")
+        # Normalize path for Windows compatibility
+        normalized_test_file = os.path.normcase(os.path.abspath(test_file))
+        result_keys = {os.path.normcase(os.path.abspath(k)): v for k, v in results.items()}
+        self.assertIn(normalized_test_file, result_keys,
+                     f"Test file {normalized_test_file} not in results: {list(result_keys.keys())}")
+        self.assertTrue(result_keys[normalized_test_file][0])
 
     def test_process_with_subdirectory_output(self):
         """Test processing with subdirectories and output dir."""
@@ -353,7 +365,14 @@ class TestDirectoryProcessorExtended(unittest.TestCase):
 
         # Check that nested structure is preserved
         output_file = os.path.join(self.output_dir, 'src', 'helper.cpp')
-        self.assertTrue(os.path.exists(output_file))
+        # For better debugging, list what files actually exist
+        if not os.path.exists(output_file):
+            # Walk the output directory to see what was created
+            created_files = []
+            for root, dirs, files in os.walk(self.output_dir):
+                for file in files:
+                    created_files.append(os.path.join(root, file))
+            self.fail(f"Output file not found: {output_file}\nCreated files: {created_files}")
 
     def test_enhance_existing_in_processor(self):
         """Test DirectoryProcessor with enhance_existing flag."""
@@ -457,7 +476,11 @@ class TestDirectoryProcessorExtended(unittest.TestCase):
             new_content = f.read()
 
         self.assertNotEqual(original_content, new_content)
-        self.assertTrue(results[test_file][0])
+        # Normalize path for Windows compatibility
+        normalized_test_file = os.path.normcase(os.path.abspath(test_file))
+        result_keys = {os.path.normcase(os.path.abspath(k)): v for k, v in results.items()}
+        self.assertIn(normalized_test_file, result_keys)
+        self.assertTrue(result_keys[normalized_test_file][0])
 
     def test_process_directory_error_handling(self):
         """Test error handling during directory processing."""
@@ -471,7 +494,10 @@ class TestDirectoryProcessorExtended(unittest.TestCase):
         results = self.processor.process_directory(self.test_dir, dry_run=False, recursive=False)
 
         # Should still return results, possibly with errors
-        self.assertIn(test_file, results)
+        # Normalize path for Windows compatibility
+        normalized_test_file = os.path.normcase(os.path.abspath(test_file))
+        result_keys = [os.path.normcase(os.path.abspath(k)) for k in results.keys()]
+        self.assertIn(normalized_test_file, result_keys)
 
 
 if __name__ == "__main__":
