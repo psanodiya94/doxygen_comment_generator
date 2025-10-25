@@ -7,6 +7,7 @@ Runs tests with optional coverage reporting and attractive output formatting.
 import sys
 import subprocess
 import argparse
+import platform
 from pathlib import Path
 
 
@@ -22,6 +23,13 @@ class Colors:
     BOLD = '\033[1m'
     UNDERLINE = '\033[4m'
 
+
+def get_python_command():
+    """Get the current operating system"""
+    if platform.system() == 'Windows':
+        return 'python'
+    else:
+        return 'python3'
 
 def print_banner(text, color=Colors.OKBLUE):
     """Print a formatted banner"""
@@ -74,7 +82,7 @@ def check_dependencies():
 
     # Check pytest
     result = subprocess.run(
-        'python3 -m pytest --version',
+        get_python_command() + ' -m pytest --version',
         shell=True,
         capture_output=True,
         text=True
@@ -89,7 +97,7 @@ def check_dependencies():
 
     # Check pytest-cov (optional)
     result_cov = subprocess.run(
-        'python3 -c "import pytest_cov" 2>/dev/null',
+        get_python_command() + ' -c "import pytest_cov" 2>/dev/null',
         shell=True,
         capture_output=True,
         text=True
@@ -111,7 +119,7 @@ def install_dependencies(with_coverage=False):
     if with_coverage:
         packages.append('pytest-cov')
 
-    cmd = f"python3 -m pip install {' '.join(packages)}"
+    cmd = f"{get_python_command()} -m pip install {' '.join(packages)}"
     print_info(f"Installing {', '.join(packages)}...")
 
     result = subprocess.run(
@@ -199,7 +207,7 @@ def run_tests(with_coverage=False, verbose=False, test_path=None, auto_install=F
             return run_tests_with_unittest(test_path)
 
     # Build pytest command
-    cmd_parts = ['python3', '-m', 'pytest']
+    cmd_parts = [get_python_command(), '-m', 'pytest']
 
     # Add test path if specified
     if test_path:
