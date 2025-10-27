@@ -6,7 +6,7 @@ Handles .cpp, .cc, .cxx files including test files with intelligent test case do
 import re
 from typing import List, Dict, Optional, Tuple
 from ..header.header_generator import HeaderDoxygenGenerator
-from ..test_analyzer import TestCaseAnalyzer, TestInfo
+from ..analyzer import TestCaseAnalyzer, TestInfo
 
 
 class CppSourceGenerator(HeaderDoxygenGenerator):

@@ -10,7 +10,7 @@ from unittest.mock import patch, mock_open
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../src')))
 
 from generator.cpp.cpp_generator import CppSourceGenerator
-from generator.test_analyzer import TestCaseAnalyzer, TestInfo
+from generator.analyzer import TestCaseAnalyzer, TestInfo
 
 
 class TestCppSourceGenerator(unittest.TestCase):
@@ -350,7 +350,7 @@ TEST_CASE("test case") {
 
     def test_generate_test_description_variations(self):
         """Test various test name patterns."""
-        from generator.test_analyzer import TestInfo
+        from generator.analyzer import TestInfo
 
         test_cases = [
             "testBasicFunctionality",
@@ -543,7 +543,7 @@ class TestTestAnalyzerExtended(unittest.TestCase):
 
     def test_test_name_with_special_characters(self):
         """Test handling of test names with special characters."""
-        from generator.test_analyzer import TestInfo
+        from generator.analyzer import TestInfo
 
         test_names = [
             'Test_With_Underscores',
