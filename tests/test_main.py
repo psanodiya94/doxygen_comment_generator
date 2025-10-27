@@ -146,7 +146,7 @@ class TestMain(unittest.TestCase):
 
     def test_main_gui_mode(self):
         """Test GUI mode."""
-        with patch('sys.argv', ['script', '--gui']):
+        with patch('sys.argv', ['script', '--gui', '--input_file', 'test.h']):
             # Create a mock module for each tkinter submodule
             mock_tkinter = MagicMock()
             mock_filedialog = MagicMock()

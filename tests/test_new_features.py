@@ -12,7 +12,7 @@ import shutil
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../src')))
 
-from generator.test_analyzer import TestCaseAnalyzer, TestInfo
+from generator.analyzer import TestCaseAnalyzer, TestInfo
 from generator.cpp.cpp_generator import CppSourceGenerator
 from generator.directory_processor import DirectoryProcessor
 
