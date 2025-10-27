@@ -580,7 +580,7 @@ class HeaderDoxygenGenerator:
         ]
         return comment
 
-    def _generate_variable_comment(self, var: Dict, indent: str = "") -> list[str] | None:
+    def _generate_variable_comment(self, var: Dict, indent: str = "") -> Optional[List[str]]:
         """
         Generate Doxygen comment for a variable.
 

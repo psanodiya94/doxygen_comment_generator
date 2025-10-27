@@ -3,7 +3,7 @@ import os
 import sys
 import tempfile
 import shutil
-from unittest.mock import patch, MagicMock, mock_open
+from unittest.mock import patch, MagicMock
 from io import StringIO
 
 # Add the src directory to the Python path
