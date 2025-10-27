@@ -160,6 +160,9 @@ class TestMain(unittest.TestCase):
             mock_filedialog.asksaveasfilename.return_value = ""
             mock_scrolledtext.ScrolledText = MagicMock()
 
+            # Make mainloop raise SystemExit to prevent continuing after GUI
+            mock_root.mainloop.side_effect = SystemExit(0)
+
             # Mock all required tkinter components
             with patch.dict('sys.modules', {
                 'tkinter': mock_tkinter,
@@ -167,7 +170,9 @@ class TestMain(unittest.TestCase):
                 'tkinter.messagebox': mock_messagebox,
                 'tkinter.scrolledtext': mock_scrolledtext
             }), patch('sys.stdout', new=StringIO()):
-                main()
+                with self.assertRaises(SystemExit) as cm:
+                    main()
+                self.assertEqual(cm.exception.code, 0)
                 # Verify that Tk was initialized and mainloop was called
                 mock_tkinter.Tk.assert_called_once()
 
@@ -211,6 +216,87 @@ class TestMain(unittest.TestCase):
                         main()
                     self.assertEqual(cm.exception.code, 2)
                     self.assertIn("Error importing generator modules", fake_out.getvalue())
+
+    def test_processing_file_error(self):
+        """Test error when processing file fails."""
+        with patch('sys.argv', ['script', '-f', self.test_header]):
+            with patch('sys.stdout', new=StringIO()) as fake_out:
+                with patch('generator.cpp.cpp_generator.CppSourceGenerator.parse_source',
+                         side_effect=Exception("Parse error")):
+                    with self.assertRaises(SystemExit) as cm:
+                        main()
+                    self.assertEqual(cm.exception.code, 3)
+                    self.assertIn("Error processing file", fake_out.getvalue())
+
+    def test_all_header_extensions(self):
+        """Test all supported header file extensions."""
+        extensions = ['.h', '.hpp', '.hh', '.hxx']
+        for ext in extensions:
+            test_file = os.path.join(self.temp_dir, f"test{ext}")
+            with open(test_file, 'w') as f:
+                f.write("class Test {};")
+
+            with patch('sys.argv', ['script', '-f', test_file]):
+                with patch('sys.stdout', new=StringIO()) as fake_out:
+                    main()
+                    output = fake_out.getvalue()
+                    self.assertIn("Doxygen comments added", output)
+
+    def test_all_source_extensions(self):
+        """Test all supported C++ source file extensions."""
+        extensions = ['.cpp', '.cc', '.cxx', '.c++']
+        for ext in extensions:
+            test_file = os.path.join(self.temp_dir, f"test{ext}")
+            with open(test_file, 'w') as f:
+                f.write("int main() { return 0; }")
+
+            with patch('sys.argv', ['script', '-f', test_file]):
+                with patch('sys.stdout', new=StringIO()) as fake_out:
+                    main()
+                    output = fake_out.getvalue()
+                    self.assertIn("Doxygen comments added", output)
+
+    def test_dry_run_directory_mode(self):
+        """Test dry run in directory mode."""
+        with patch('sys.argv', ['script', '-d', self.temp_dir, '--dry-run']):
+            with patch('sys.stdout', new=StringIO()) as fake_out:
+                main()
+                output = fake_out.getvalue()
+                self.assertIn("Processing Results", output)
+
+    def test_project_mode_dry_run(self):
+        """Test dry run in project mode."""
+        os.makedirs(os.path.join(self.temp_dir, "include"))
+        os.makedirs(os.path.join(self.temp_dir, "src"))
+        shutil.copy(self.test_header, os.path.join(self.temp_dir, "include", "test.h"))
+
+        with patch('sys.argv', ['script', '-p', self.temp_dir, '--dry-run']):
+            with patch('sys.stdout', new=StringIO()) as fake_out:
+                main()
+                output = fake_out.getvalue()
+                self.assertIn("Processing project", output)
+
+    def test_directory_with_output_dir(self):
+        """Test directory processing with output directory."""
+        output_dir = os.path.join(self.temp_dir, "output")
+        with patch('sys.argv', ['script', '-d', self.temp_dir, '-o', output_dir]):
+            with patch('sys.stdout', new=StringIO()):
+                main()
+                # Output directory should be created
+                self.assertTrue(os.path.exists(output_dir))
+
+    def test_project_with_output_dir(self):
+        """Test project processing with output directory."""
+        os.makedirs(os.path.join(self.temp_dir, "include"))
+        shutil.copy(self.test_header, os.path.join(self.temp_dir, "include", "test.h"))
+        output_dir = os.path.join(self.temp_dir, "output")
+
+        with patch('sys.argv', ['script', '-p', self.temp_dir, '-o', output_dir]):
+            with patch('sys.stdout', new=StringIO()):
+                main()
+                # Output directory should be created
+                self.assertTrue(os.path.exists(output_dir))
+
 
 if __name__ == '__main__':
     unittest.main()
